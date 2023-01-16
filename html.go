@@ -312,7 +312,15 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 	case "span":
 		fallthrough
 	case "address":
-		fallthrough
+		if node.FirstChild != nil {
+			text := node.FirstChild.Raw.Data
+			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			textVBuffer := textSize / 5 // todo: where is this from?
+			// todo: is this the background of p or the background of the text content child?
+			drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
+			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
+		}
 	case "p":
 		if node.FirstChild != nil {
 			text := node.FirstChild.Raw.Data
@@ -348,6 +356,7 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		// todo: this number appears to be too big compared to firefox; I think padding doesn't take into account the bullet width
 		padding, _ := parseLength(node.Style["padding-left"])
 		childDrawzoneModifier[0] = padding
+		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, 16})
 	case "li":
 		switch node.Raw.Parent.Data {
 		case "ul":
