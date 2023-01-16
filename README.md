@@ -34,6 +34,6 @@ The input data for test suites can be found in `testdata`.
 ## Notes
 
 - HTML and CSS rendering are combined as HTML cannot be rendered without some concept of styles; style-less HTML is still driven by baked-in default styles, which are roughly agreed upon by existing web browsers.
-- This project targets CSS4 and HTML5, but earlier versions of these languages should be targeted for intermediate functionality goals.
+- This project targets CSS3 and HTML5, but earlier versions of these languages should be targeted for intermediate functionality goals.
 - Some functionality may be explicitly avoided to produce a library with less potential exploits, particularly around code execution, network access, and local file system access.
 - To date this project is not interested in looking at existing open source implementations e.g. Chromium and copying their approach; this would save time at the cost of producing two identical implementations, with this project being likely inferior.
