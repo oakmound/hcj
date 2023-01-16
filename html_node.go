@@ -43,9 +43,11 @@ func ParseNode(node *html.Node, opts ...ParseNodeOption) *ParsedNode {
 	// todo: what properties are inherited?
 	// find a table
 	inheritedProps := map[string]struct{}{
-		"color":      {},
-		"opacity":    {},
-		"background": {},
+		"color":            {},
+		"opacity":          {},
+		"background":       {},
+		"background-color": {},
+		"font-style":       {},
 	}
 	pn.CalculateStyle(cfg.CSS)
 INHERIT_LOOP:
@@ -57,6 +59,7 @@ INHERIT_LOOP:
 				if k != "color" {
 					continue INHERIT_LOOP
 				}
+			case "":
 			default:
 				continue INHERIT_LOOP
 			}
@@ -68,7 +71,7 @@ INHERIT_LOOP:
 		//pn.FirstChild.setParent(pn)
 	}
 	if node.NextSibling != nil {
-		pn.NextSibling = ParseNode(node.NextSibling, WithCSS(cfg.CSS))
+		pn.NextSibling = ParseNode(node.NextSibling, WithCSS(cfg.CSS), WithParentStyle(cfg.ParentStyle))
 	}
 	return pn
 }
@@ -120,6 +123,8 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 			}
 			if matcher.Match(pn) {
 				priority += 10
+			} else {
+				priority = 0
 			}
 		}
 		if priority != 0 {
