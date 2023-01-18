@@ -2,6 +2,7 @@ package hcj
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -219,6 +220,10 @@ func ParseAttributeSelector(selector string) (AttributeSelector, error) {
 		if len(attr) == 0 || len(val) == 0 {
 			return nil, ErrInvalidSelector
 		}
+		if v, err := strconv.Unquote(val); err == nil {
+			val = v
+		}
+
 		switch attr[len(attr)-1] {
 		case '*':
 			match = func(pn *ParsedNode) bool {
