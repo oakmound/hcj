@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"golang.org/x/net/html"
 
@@ -296,6 +297,7 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		drawzone.Min[0] = margin.Min[0]
 	}
 	childDrawzoneModifier := floatgeom.Point2{}
+	// TODO: inline vs block / content categories
 	switch node.Tag {
 	case "div":
 		// TODO: div and p are really similar and yet subtly different, why?
@@ -314,6 +316,10 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 	case "address":
 		if node.FirstChild != nil {
 			text := node.FirstChild.Raw.Data
+			// This is not correct?
+			if !unicode.IsSpace(rune(text[len(text)-1])) {
+				text += " "
+			}
 			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
 			textVBuffer := textSize / 5 // todo: where is this from?
 			// todo: is this the background of p or the background of the text content child?
