@@ -13,7 +13,7 @@ As of January 2023, HCJ has semi-functional HTML and CSS, and no JS capabilities
 | JS Parsing         | 0% complete                          |
 | HTML/CSS Rendering | ~10% complete                        |
 | JS Rendering       | 0% complete                          |
-| Tests Passing      | 42                                   |
+| Tests Passing      | 45                                   |
 | Test Count         | 228                                  |
 
 ## Philosophy
