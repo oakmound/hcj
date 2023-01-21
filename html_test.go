@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/oakmound/oak/v4/alg/intgeom"
 	"github.com/oakmound/hcj"
+	"github.com/oakmound/oak/v4/alg/intgeom"
 )
 
 var testDirs = []string{"htmlin", "extrahtmlin"}
@@ -68,11 +68,11 @@ func Test_RenderHTML_Golden(t *testing.T) {
 		outputs[fi.Name()] = *rgba
 	}
 	for i, in := range inputs {
-		i := i 
+		i := i
 		in := in
 		t.Run(i, func(t *testing.T) {
 			t.Parallel()
-			sp, err := hcj.RenderHTML(in, intgeom.Point2{500, 300})
+			node, sp, err := hcj.ParseAndRenderHTML(in, intgeom.Point2{500, 300})
 			if err != nil {
 				t.Error(err)
 				return
@@ -100,6 +100,9 @@ func Test_RenderHTML_Golden(t *testing.T) {
 					t.Fatal(err)
 				}
 				png.Encode(outfile, &rgba1)
+
+				// print out internal rep
+				fmt.Println(node)
 				outfile.Close()
 			}
 		})
