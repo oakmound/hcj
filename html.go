@@ -19,15 +19,55 @@ import (
 	"github.com/oakmound/oak/v4/render"
 )
 
+// RenderHTML as a sprite with the provided dimensions
 func RenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*render.Sprite, error) {
+	_, sp, err := ParseAndRenderHTML(htmlReader, dims)
+	return sp, err
+}
+
+// ParseAndRenderHTML outputting the internal Node representation along with a sprite that has
+// the given dimensions.
+func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode, *render.Sprite, error) {
+	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
+
+	parsed, err := ParseHTMLNodes(htmlReader)
+	if err != nil || parsed == nil {
+		return parsed, nil, err
+	}
+
+	// empty html is blank white
+	var bkgColor color.Color = color.RGBA{255, 255, 255, 255}
+
+	// TODO: what to do if both of these are set?
+	if col, ok := parsed.Style["background-color"]; ok {
+		bkgColor, _, _ = parseHTMLColor(col)
+	} else if col, ok := parsed.Style["background"]; ok {
+		bkgColor, _, _ = parseHTMLColor(col)
+	}
+	for x := 0; x < dims.X(); x++ {
+		for y := 0; y < dims.Y(); y++ {
+			sp.Set(x, y, bkgColor)
+		}
+	}
+	fullBodyMargin := parseMargin(parsed.Style)
+	bodyMargin := fullBodyMargin.Min
+	zone := floatgeom.Rect2{
+		Min: bodyMargin,
+		Max: floatgeom.Point2{float64(dims.X()), float64(dims.Y())}.Sub(bodyMargin),
+	}
+	drawNode(parsed.FirstChild, sp, zone)
+
+	return parsed, sp, err
+}
+
+func ParseHTMLNodes(htmlReader io.Reader) (*ParsedNode, error) {
+
 	rootNode, err := html.Parse(htmlReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse html: %w", err)
 	}
-	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
-	// 1: empty html is blank white
-	var bkgColor color.Color = color.RGBA{255, 255, 255, 255}
-	// 2: body style background-color
+
+	// body style background-color
 	var css CSS
 	if headNode := findHTMLNode(rootNode, "head"); headNode != nil {
 		if styleNode := findHTMLNode(headNode, "style"); styleNode != nil {
@@ -37,28 +77,12 @@ func RenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*render.Sprite, erro
 		}
 	}
 	css = DefaultCSS().Merge(css)
+	var bn *ParsedNode
 	if bodyNode := findHTMLNode(rootNode, "body"); bodyNode != nil {
-		bn := ParseNode(bodyNode, WithCSS(css))
-		// TODO: what to do if both of these are set?
-		if col, ok := bn.Style["background-color"]; ok {
-			bkgColor, _, _ = parseHTMLColor(col)
-		} else if col, ok := bn.Style["background"]; ok {
-			bkgColor, _, _ = parseHTMLColor(col)
-		}
-		for x := 0; x < dims.X(); x++ {
-			for y := 0; y < dims.Y(); y++ {
-				sp.Set(x, y, bkgColor)
-			}
-		}
-		fullBodyMargin := parseMargin(bn.Style)
-		bodyMargin := fullBodyMargin.Min
-		zone := floatgeom.Rect2{
-			Min: bodyMargin,
-			Max: floatgeom.Point2{float64(dims.X()), float64(dims.Y())}.Sub(bodyMargin),
-		}
-		drawNode(bn.FirstChild, sp, zone)
+		bn = ParseNode(bodyNode, WithCSS(css))
 	}
-	return sp, nil
+
+	return bn, nil
 }
 
 func findHTMLNode(root *html.Node, name string) *html.Node {
@@ -307,9 +331,14 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		if node.FirstChild != nil && node.FirstChild.FirstChild == nil {
 			text := node.FirstChild.Raw.Data
 			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-			textVBuffer := textSize / 5 // todo: where is this from?
+
 			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
-			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
+
+			// Not sure if this is needed but definitely isnt if there is no text. see hcj02
+			if node.FirstChild.Raw.Type == html.TextNode {
+				textVBuffer := textSize / 5 // todo: where is this from?
+				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
+			}
 		}
 	case "span":
 		fallthrough

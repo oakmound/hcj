@@ -1,6 +1,7 @@
 package hcj
 
 import (
+	"fmt"
 	"sort"
 
 	"golang.org/x/net/html"
@@ -21,6 +22,70 @@ type ParsedNode struct {
 	NextSibling *ParsedNode
 	// LastSibling
 	//Parent *ParsedNode
+}
+
+func (pn *ParsedNode) String() string {
+
+	return pn.NestedString(0)
+}
+func (pn *ParsedNode) NestedString(indent int) string {
+	out := ""
+	nest := ""
+	startLine := ""
+	if indent > 0 {
+		nest = "\n|"
+		startLine = "-"
+		for i := 0; i < indent; i++ {
+			nest += " "
+			startLine += "-"
+		}
+	}
+	if pn.Tag != "" {
+		out += nest + fmt.Sprintf("Tag:'%s' ", pn.Tag)
+	}
+	if pn.Raw != nil {
+		out += nest + fmt.Sprintf("SubNodeType:'%v' ", nodeTypeString(int(pn.Raw.Type)))
+	}
+	if pn.ID != "" {
+		out += nest + fmt.Sprintf("ID:'%s' ", pn.ID)
+	}
+	if len(pn.Classes) != 0 {
+		out += nest + fmt.Sprintf("Classes: %v ", pn.Classes)
+	}
+	if len(pn.Style) != 0 {
+		out += nest + fmt.Sprintf("Style: %v ", pn.Style)
+	}
+	if pn.FirstChild != nil {
+		out += nest + fmt.Sprintf("First: {%v} ", pn.FirstChild.NestedString(indent+1))
+	}
+	if pn.NextSibling != nil {
+		out += nest + fmt.Sprintf("Next: {%v} ", pn.NextSibling.NestedString(indent+1))
+	}
+	if len(out) == 0 {
+		return out
+	}
+
+	return "[\n" + startLine + out + "]"
+}
+
+func nodeTypeString(enumT int) string {
+	switch enumT {
+	case 0:
+		return "error"
+	case 1:
+		return "text"
+	case 2:
+		return "document"
+	case 3:
+		return "element"
+	case 4:
+		return "comment"
+	case 5:
+		return "doc"
+	case 6:
+		return "raw"
+	}
+	return "unknown"
 }
 
 type ParseNodeOptions struct {

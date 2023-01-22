@@ -1,0 +1,25 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html>
+	<head>
+	<meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+		<title>Nested Div test</title>
+
+		<meta content="" name="flags">
+		<meta content="Nested divs dont show text just their meta colors." name="assert">
+		<style type="text/css">
+
+		body { background: white; }
+
+		div { width: 5em; height: 1em; }
+		div.color { background: blue; }
+
+
+		</style>
+	</head>
+	<body>
+		<p>The following box should have no text:</p>
+
+		<div class="top"><div class="color"><div class="color"></div></div></div>
+	
+	</body>
+</html>
