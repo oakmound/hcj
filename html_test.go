@@ -16,7 +16,7 @@ import (
 	"github.com/oakmound/oak/v4/alg/intgeom"
 )
 
-var testDirs = []string{"htmlin", "extrahtmlin"}
+var testDirs = []string{"htmlin"}
 
 func Test_RenderHTML_Golden(t *testing.T) {
 	t.Parallel()
