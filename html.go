@@ -357,15 +357,35 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
 		}
 	case "p":
-		if node.FirstChild != nil {
-			text := node.FirstChild.Raw.Data
-			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-			textVBuffer := textSize / 5 // todo: where is this from?
-			// todo: is this the background of p or the background of the text content child?
-			drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
-			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
-			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
+		nextChild := node.FirstChild
+		texts := []string{""}
+		textIndex := 0
+		for nextChild != nil {
+			switch nextChild.Raw.Type {
+			case html.TextNode:
+				text := nextChild.Raw.Data
+				texts[textIndex] += text
+			default:
+				if nextChild.Tag == "br" {
+					textIndex++
+					texts = append(texts, "")
+				}
+			}
+			nextChild = nextChild.NextSibling
 		}
+		var textVBuffer float64
+		for i, text := range texts {
+			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			textVBuffer = textSize / 5 // todo: where is this from?
+			// todo: is this the background of p or the background of the text content child?
+			if i == 0 {
+				drawBackground(node, sp, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
+			}
+			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
+		}
+		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
+
 	case "img":
 		for _, atr := range node.Raw.Attr {
 			if atr.Key == "src" {
@@ -542,7 +562,7 @@ func formatTextAsSprite(node *ParsedNode, drawzone floatgeom.Rect2, textSizeDefa
 	newTxt := strings.Builder{}
 	foundNewline := false
 	var lastRn rune
-	for _, rn := range inText {
+	for i, rn := range inText {
 		// trim all whitespace following newlines
 		if foundNewline && (rn == ' ' || rn == '\t' || rn == '\r') {
 			continue
@@ -550,7 +570,7 @@ func formatTextAsSprite(node *ParsedNode, drawzone floatgeom.Rect2, textSizeDefa
 		foundNewline = false
 		if rn == '\n' {
 			// newlines become spaces iff a space is not already present before them
-			if lastRn != ' ' {
+			if lastRn != ' ' && i != 0 {
 				newTxt.WriteRune(' ')
 			}
 			foundNewline = true
