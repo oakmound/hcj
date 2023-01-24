@@ -26,33 +26,19 @@ func TestParseSelector(t *testing.T) {
 		}, {
 			input: ".class",
 			expected: Selector{
-				Classes: []string{"class"},
-			},
-		}, {
-			input: ".class1.class2",
-			expected: Selector{
-				Classes: []string{"class1", "class2"},
+				Class: "class",
 			},
 		}, {
 			input: "#id",
 			expected: Selector{
 				ID: "id",
 			},
-		},
-		{
+		}, {
 			input: "tag.class#id",
 			expected: Selector{
-				ID:      "id",
-				Tag:     "tag",
-				Classes: []string{"class"},
-			},
-		},
-		{
-			input: "tag.class1.class2#id",
-			expected: Selector{
-				ID:      "id",
-				Tag:     "tag",
-				Classes: []string{"class1", "class2"},
+				ID:    "id",
+				Tag:   "tag",
+				Class: "class",
 			},
 		}, {
 			input: "tag#id",
@@ -63,9 +49,9 @@ func TestParseSelector(t *testing.T) {
 		}, {
 			input: "tag#id.class",
 			expected: Selector{
-				ID:      "id",
-				Tag:     "tag",
-				Classes: []string{"class"},
+				ID:    "id",
+				Tag:   "tag",
+				Class: "class",
 			},
 		}, {
 			input: "a[target]",
@@ -127,6 +113,12 @@ func TestParseSelectorInvalid(t *testing.T) {
 		{
 			input: "#.",
 		},
+		{
+			input: ".class1.class2",
+		},
+		{
+			input: "tag.class1.class2#id",
+		},
 	}
 	for i, tc := range tcs {
 		tc := tc
@@ -150,13 +142,8 @@ func SelectorsEqual(s1, s2 Selector) error {
 	if s1.Global != s2.Global {
 		return fmt.Errorf("mismatched Global: %v vs %v", s1.Global, s2.Global)
 	}
-	if len(s1.Classes) != len(s2.Classes) {
-		return fmt.Errorf("mismatched class length : %v vs %v", len(s1.Classes), len(s2.Classes))
-	}
-	for i, c1 := range s1.Classes {
-		if s2.Classes[i] != c1 {
-			return fmt.Errorf("mismatched class at index %d : %v vs %v", i, len(s1.Classes), len(s2.Classes))
-		}
+	if s2.Class != s1.Class {
+		return fmt.Errorf("mismatched class: %v vs %v", s1.Class, s2.Class)
 	}
 	return nil
 }

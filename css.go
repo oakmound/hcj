@@ -61,7 +61,7 @@ type Selector struct {
 	Tag       string
 	ID        string // Multiple IDs are supported, but we lack an example where they would be used. Styles with multiple IDs should be discarded for now.
 	Attribute string
-	Classes   []string
+	Class     string // Multiple classes are not supported see css3-modsel-14b
 	Global    bool
 }
 
@@ -103,7 +103,7 @@ func ParseSelector(s string) (Selector, error) {
 				return sel, ErrInvalidSelector
 			} else if len(next) != 0 {
 				if nextIsClass {
-					sel.Classes = append(sel.Classes, string(next))
+					sel.Class = string(next)
 					next = []rune{}
 				} else {
 					sel.Tag = string(next)
@@ -113,12 +113,15 @@ func ParseSelector(s string) (Selector, error) {
 			nextIsClass = false
 			nextIsID = true
 		case '.':
+			if nextIsClass || sel.Class != "" {
+				return sel, ErrInvalidSelector
+			}
 			if len(next) == 0 && (nextIsClass || nextIsID) {
 				// invalid #. or ..
 				return sel, ErrInvalidSelector
 			} else if len(next) != 0 {
 				if nextIsClass {
-					sel.Classes = append(sel.Classes, string(next))
+					sel.Class = string(next)
 					next = []rune{}
 				} else if nextIsID {
 					sel.ID = string(next)
@@ -145,7 +148,7 @@ func ParseSelector(s string) (Selector, error) {
 			return sel, ErrInvalidSelector
 		}
 		if nextIsClass {
-			sel.Classes = append(sel.Classes, string(next))
+			sel.Class = string(next)
 		} else if nextIsID {
 			sel.ID = string(next)
 		} else {

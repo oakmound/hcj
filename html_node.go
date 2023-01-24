@@ -175,10 +175,8 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 			priority += 1
 		}
 		for _, c := range pn.Classes {
-			for _, c2 := range sel.Classes {
-				if c == c2 {
-					priority += 10
-				}
+			if c == sel.Class {
+				priority += 10
 			}
 		}
 		if sel.Attribute != "" {
