@@ -77,7 +77,7 @@ func ParseSelector(s string) (Selector, error) {
 	// utf8?
 	var next []rune
 	var nextIsID, nextIsClass, nextIsAttribute bool
-	for _, c := range s {
+	for i, c := range s {
 		switch c {
 		case '[':
 			// TODO: are some of these conditions workable?
@@ -113,6 +113,9 @@ func ParseSelector(s string) (Selector, error) {
 			nextIsClass = false
 			nextIsID = true
 		case '.':
+			if i == 0 {
+				return sel, ErrInvalidSelector
+			}
 			if len(next) == 0 && (nextIsClass || nextIsID) {
 				// invalid #. or ..
 				return sel, ErrInvalidSelector

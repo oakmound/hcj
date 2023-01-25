@@ -24,13 +24,15 @@ func TestParseSelector(t *testing.T) {
 				Tag: "tag",
 			},
 		}, {
-			input: ".class",
+			input: "tag.class",
 			expected: Selector{
+				Tag:     "tag",
 				Classes: []string{"class"},
 			},
 		}, {
-			input: ".class1.class2",
+			input: "tag.class1.class2",
 			expected: Selector{
+				Tag:     "tag",
 				Classes: []string{"class1", "class2"},
 			},
 		}, {
@@ -126,6 +128,12 @@ func TestParseSelectorInvalid(t *testing.T) {
 		},
 		{
 			input: "#.",
+		},
+		{
+			input: ".class1.class2",
+		},
+		{
+			input: ".class1",
 		},
 	}
 	for i, tc := range tcs {

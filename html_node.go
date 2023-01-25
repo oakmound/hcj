@@ -59,7 +59,7 @@ func (pn *ParsedNode) NestedString(indent int) string {
 		out += nest + fmt.Sprintf("First: {%v} ", pn.FirstChild.NestedString(indent+1))
 	}
 	if pn.NextSibling != nil {
-		out += nest + fmt.Sprintf("Next: {%v} ", pn.NextSibling.NestedString(indent+1))
+		out += nest + fmt.Sprintf("Next: {%v} ", pn.NextSibling.NestedString(indent))
 	}
 	if len(out) == 0 {
 		return out
@@ -149,7 +149,7 @@ INHERIT_LOOP:
 // }
 
 type styleWithPriority struct {
-	priority uint16 // max ~1000
+	priority int16 // max ~1000
 	style    map[string]string
 }
 
@@ -160,7 +160,7 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 		if err != nil {
 			continue
 		}
-		priority := uint16(0)
+		priority := int16(0)
 		if sel.Global {
 			styles = append(styles, styleWithPriority{
 				priority: priority,
@@ -174,12 +174,19 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 		if sel.Tag == pn.Tag {
 			priority += 1
 		}
-		for _, c := range pn.Classes {
-			for _, c2 := range sel.Classes {
+		for _, c2 := range sel.Classes {
+			match := false
+			for _, c := range pn.Classes {
 				if c == c2 {
+					match = true
 					priority += 10
+					break
 				}
 			}
+			if !match {
+				priority = -1000
+			}
+
 		}
 		if sel.Attribute != "" {
 			matcher, err := ParseAttributeSelector(sel.Attribute)
@@ -189,10 +196,10 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 			if matcher.Match(pn) {
 				priority += 10
 			} else {
-				priority = 0
+				priority = -1000
 			}
 		}
-		if priority != 0 {
+		if priority > 0 {
 			styles = append(styles, styleWithPriority{
 				priority: priority,
 				style:    style,
