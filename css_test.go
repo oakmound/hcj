@@ -24,27 +24,30 @@ func TestParseSelector(t *testing.T) {
 				Tag: "tag",
 			},
 		}, {
-			input: "tag.class",
+			input: ".class",
 			expected: Selector{
-				Tag:     "tag",
 				Classes: []string{"class"},
 			},
 		}, {
-			input: "tag.class1.class2",
+			input: ".class1.class2",
 			expected: Selector{
-				Tag:     "tag",
 				Classes: []string{"class1", "class2"},
 			},
 		}, {
 			input: "#id",
 			expected: Selector{
-				ID: "id",
+				IDs: []string{"id"},
+			},
+		}, {
+			input: "#id1#id2",
+			expected: Selector{
+				IDs: []string{"id1", "id2"},
 			},
 		},
 		{
 			input: "tag.class#id",
 			expected: Selector{
-				ID:      "id",
+				IDs:     []string{"id"},
 				Tag:     "tag",
 				Classes: []string{"class"},
 			},
@@ -52,20 +55,20 @@ func TestParseSelector(t *testing.T) {
 		{
 			input: "tag.class1.class2#id",
 			expected: Selector{
-				ID:      "id",
+				IDs:     []string{"id"},
 				Tag:     "tag",
 				Classes: []string{"class1", "class2"},
 			},
 		}, {
 			input: "tag#id",
 			expected: Selector{
-				ID:  "id",
+				IDs: []string{"id"},
 				Tag: "tag",
 			},
 		}, {
 			input: "tag#id.class",
 			expected: Selector{
-				ID:      "id",
+				IDs:     []string{"id"},
 				Tag:     "tag",
 				Classes: []string{"class"},
 			},
@@ -115,9 +118,6 @@ func TestParseSelectorInvalid(t *testing.T) {
 			input: "\t",
 		},
 		{
-			input: "#id1#id2",
-		},
-		{
 			input: "##",
 		},
 		{
@@ -129,12 +129,12 @@ func TestParseSelectorInvalid(t *testing.T) {
 		{
 			input: "#.",
 		},
-		{
-			input: ".class1.class2",
-		},
-		{
-			input: ".class1",
-		},
+		// {
+		// 	input: ".class1.class2",
+		// },
+		// {
+		// 	input: ".class1",
+		// },
 	}
 	for i, tc := range tcs {
 		tc := tc
@@ -152,8 +152,13 @@ func SelectorsEqual(s1, s2 Selector) error {
 	if s1.Tag != s2.Tag {
 		return fmt.Errorf("mismatched tag: %v vs %v", s1.Tag, s2.Tag)
 	}
-	if s1.ID != s2.ID {
-		return fmt.Errorf("mismatched ID: %v vs %v", s1.ID, s2.ID)
+	if len(s1.IDs) != len(s2.IDs) {
+		return fmt.Errorf("mismatched ids length : %v vs %v", len(s1.IDs), len(s2.IDs))
+	}
+	for i, c1 := range s1.IDs {
+		if s2.IDs[i] != c1 {
+			return fmt.Errorf("mismatched id at index %d : %v vs %v", i, len(s1.IDs), len(s2.IDs))
+		}
 	}
 	if s1.Global != s2.Global {
 		return fmt.Errorf("mismatched Global: %v vs %v", s1.Global, s2.Global)

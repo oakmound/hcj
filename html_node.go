@@ -168,8 +168,12 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 			})
 			continue
 		}
-		if sel.ID != "" && sel.ID == pn.ID {
-			priority += 100
+		for _, id := range sel.IDs {
+			if pn.ID == id {
+				priority += 100
+			} else {
+				priority = -1000
+			}
 		}
 		if sel.Tag == pn.Tag {
 			priority += 1
@@ -186,7 +190,6 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 			if !match {
 				priority = -1000
 			}
-
 		}
 		if sel.Attribute != "" {
 			matcher, err := ParseAttributeSelector(sel.Attribute)

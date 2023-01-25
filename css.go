@@ -59,7 +59,7 @@ func (c CSS) Merge(c2 CSS) CSS {
 
 type Selector struct {
 	Tag       string
-	ID        string // Multiple IDs are supported, but we lack an example where they would be used. Styles with multiple IDs should be discarded for now.
+ 	IDs       []string
 	Attribute string
 	Classes   []string
 	Global    bool
@@ -77,7 +77,7 @@ func ParseSelector(s string) (Selector, error) {
 	// utf8?
 	var next []rune
 	var nextIsID, nextIsClass, nextIsAttribute bool
-	for i, c := range s {
+	for _, c := range s {
 		switch c {
 		case '[':
 			// TODO: are some of these conditions workable?
@@ -95,15 +95,15 @@ func ParseSelector(s string) (Selector, error) {
 			next = []rune{}
 			nextIsAttribute = false
 		case '#':
-			if sel.ID != "" || nextIsID {
-				return sel, ErrInvalidSelector
-			}
 			if len(next) == 0 && (nextIsClass || nextIsID) {
 				// invalid .# or ##
 				return sel, ErrInvalidSelector
 			} else if len(next) != 0 {
 				if nextIsClass {
 					sel.Classes = append(sel.Classes, string(next))
+					next = []rune{}
+				} else if nextIsID {
+					sel.IDs = append(sel.IDs, string(next))
 					next = []rune{}
 				} else {
 					sel.Tag = string(next)
@@ -113,9 +113,6 @@ func ParseSelector(s string) (Selector, error) {
 			nextIsClass = false
 			nextIsID = true
 		case '.':
-			if i == 0 {
-				return sel, ErrInvalidSelector
-			}
 			if len(next) == 0 && (nextIsClass || nextIsID) {
 				// invalid #. or ..
 				return sel, ErrInvalidSelector
@@ -124,7 +121,7 @@ func ParseSelector(s string) (Selector, error) {
 					sel.Classes = append(sel.Classes, string(next))
 					next = []rune{}
 				} else if nextIsID {
-					sel.ID = string(next)
+					sel.IDs = append(sel.IDs, string(next))
 					next = []rune{}
 				} else {
 					sel.Tag = string(next)
@@ -150,7 +147,7 @@ func ParseSelector(s string) (Selector, error) {
 		if nextIsClass {
 			sel.Classes = append(sel.Classes, string(next))
 		} else if nextIsID {
-			sel.ID = string(next)
+			sel.IDs = append(sel.IDs, string(next))
 		} else {
 			sel.Tag = string(next)
 		}
@@ -193,6 +190,15 @@ func ParseCSS(s string) CSS {
 		}
 		selectorKeys := strings.Split(selectorStr, ",")
 		for _, selectorStr := range selectorKeys {
+			for {
+				i := strings.Index(selectorStr, "/*")
+				if i == -1 {
+					break
+				}
+				j := strings.Index(selectorStr, "*/")
+				selectorStr = selectorStr[:i] + selectorStr[j+2:]
+			}
+			selectorStr = strings.TrimSpace(selectorStr)
 			if c.Selectors[selectorStr] == nil {
 				c.Selectors[selectorStr] = make(map[string]string)
 			}
