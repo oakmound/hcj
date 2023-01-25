@@ -61,7 +61,7 @@ type Selector struct {
 	Tag       string
 	ID        string // Multiple IDs are supported, but we lack an example where they would be used. Styles with multiple IDs should be discarded for now.
 	Attribute string
-	Class     string // Multiple classes are not supported see css3-modsel-14b
+	Classes   []string
 	Global    bool
 }
 
@@ -77,7 +77,7 @@ func ParseSelector(s string) (Selector, error) {
 	// utf8?
 	var next []rune
 	var nextIsID, nextIsClass, nextIsAttribute bool
-	for _, c := range s {
+	for i, c := range s {
 		switch c {
 		case '[':
 			// TODO: are some of these conditions workable?
@@ -103,7 +103,7 @@ func ParseSelector(s string) (Selector, error) {
 				return sel, ErrInvalidSelector
 			} else if len(next) != 0 {
 				if nextIsClass {
-					sel.Class = string(next)
+					sel.Classes = append(sel.Classes, string(next))
 					next = []rune{}
 				} else {
 					sel.Tag = string(next)
@@ -113,7 +113,7 @@ func ParseSelector(s string) (Selector, error) {
 			nextIsClass = false
 			nextIsID = true
 		case '.':
-			if nextIsClass || sel.Class != "" {
+			if i == 0 {
 				return sel, ErrInvalidSelector
 			}
 			if len(next) == 0 && (nextIsClass || nextIsID) {
@@ -121,7 +121,7 @@ func ParseSelector(s string) (Selector, error) {
 				return sel, ErrInvalidSelector
 			} else if len(next) != 0 {
 				if nextIsClass {
-					sel.Class = string(next)
+					sel.Classes = append(sel.Classes, string(next))
 					next = []rune{}
 				} else if nextIsID {
 					sel.ID = string(next)
@@ -148,7 +148,7 @@ func ParseSelector(s string) (Selector, error) {
 			return sel, ErrInvalidSelector
 		}
 		if nextIsClass {
-			sel.Class = string(next)
+			sel.Classes = append(sel.Classes, string(next))
 		} else if nextIsID {
 			sel.ID = string(next)
 		} else {

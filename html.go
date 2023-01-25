@@ -324,19 +324,24 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 	// TODO: inline vs block / content categories
 	switch node.Tag {
 	case "div":
+		textSize := 16.0
+		if size, ok := parseLength(node.Style["font-size"]); ok {
+			textSize = float64(size)
+		}
+		textVBuffer := textSize / 5 // todo: where is this from?
+		// TODO: spacing around p and div is incorrect
 		// TODO: div and p are really similar and yet subtly different, why?
-		drawBackground(node, sp, drawzone, math.MaxFloat64, math.MaxFloat64)
+		drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
 		// TODO: this is not right; children are drawn below already;
 		// how do we know whether a node is text content?
 		if node.FirstChild != nil && node.FirstChild.FirstChild == nil {
 			text := node.FirstChild.Raw.Data
-			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
 
 			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
 
 			// Not sure if this is needed but definitely isnt if there is no text. see hcj02
 			if node.FirstChild.Raw.Type == html.TextNode {
-				textVBuffer := textSize / 5 // todo: where is this from?
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
 			}
 		}
