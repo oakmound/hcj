@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 )
@@ -21,7 +24,8 @@ func main() {
 func run() error {
 	testDirectories := []string{
 		//"https://www.w3.org/Style/CSS/Test/CSS3/Color/current/html4/",
-		"https://www.w3.org/Style/CSS/Test/CSS3/Selectors/current/html/",
+		//"https://www.w3.org/Style/CSS/Test/CSS3/Selectors/current/html/",
+		"http://test.csswg.org/suites/css-ui-3_dev/nightly-unstable/html/chapter-3.htm",
 	}
 	for _, dir := range testDirectories {
 		dirResp, err := http.DefaultClient.Get(dir)
@@ -40,22 +44,32 @@ func run() error {
 		dirResp.Body.Close()
 		// TODO: this might be too strict
 		// regex for color html
-		// rg := regexp.MustCompile(`\<a href=\"([^\>]*\.htm)\"`)
-		rg := regexp.MustCompile(`\<a href=\"(tests[^\>]*\.html)\"`)
+		rg := regexp.MustCompile(`\<a href=\"([^\>]*\.htm)\"`)
+		// for Selectors
+		//rg := regexp.MustCompile(`\<a href=\"(tests[^\>]*\.html)\"`)
 		matches := rg.FindAllSubmatch(respData, -1)
-		fmt.Printf("found %d matches\n", len(matches))
+		u, err := url.Parse(dir)
+		if err != nil {
+			return fmt.Errorf("failed to read input as url: %v", err)
+		}
+		u.Path = path.Dir(u.Path)
+		fmt.Println(u.Path)
+		dirRoot := u.String()
 		for _, matchList := range matches {
 			for i, match := range matchList {
 				if i == 0 {
 					continue
 				}
-				htmResp, err := http.DefaultClient.Get(dir + string(match))
+				if bytes.Contains(match, []byte("reference")) {
+					continue
+				}
+				htmResp, err := http.DefaultClient.Get(dirRoot + "/" + string(match))
 				if err != nil {
 					return fmt.Errorf("failed to query test data: %v", err)
 				}
 				if htmResp.StatusCode < 200 || htmResp.StatusCode > 299 {
 					htmResp.Body.Close()
-					fmt.Println(dir + string(match))
+					fmt.Println(dirRoot + "/" + string(match))
 					return fmt.Errorf("unexpected response code for test %v", htmResp.StatusCode)
 				}
 				created, err := os.Create(filepath.Join("htmlin", string(match)))

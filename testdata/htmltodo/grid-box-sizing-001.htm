@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>CSS Grid Layout Test: Grid container and tracks sizes with box-sizing property</title>
+<link href="mailto:rego@igalia.com" rel="author" title="Manuel Rego Casasnovas">
+<link href="https://drafts.csswg.org/css-grid-1/#intrinsic-sizes" rel="help">
+<link href="https://drafts.csswg.org/css-ui-3/#box-sizing" rel="help">
+<meta content="The test checks the sizes of a grid container and its track depending on min-size constraints and the box-sizing property." name="assert">
+<style>
+.wrapper {
+  position: relative;
+  width: 200px;
+  height: 100px;
+}
+
+.grid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  border-style: solid;
+  border-width: 5px 10px 15px 20px;
+  padding: 17px 13px 7px 3px;
+}
+
+.wholeWidth {
+  right: 0;
+}
+
+.wholeHeight {
+  bottom: 0;
+}
+.item {
+  background: cyan;
+}
+</style>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/check-layout-th.js"></script>
+
+</head><body onload="checkLayout('.grid')">
+
+<div id="log"></div>
+
+<div class="wrapper">
+  <div style="height: 100px;" data-expected-height="144" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="100" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-height: 100px;" data-expected-height="144" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="100" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="height: 100px; box-sizing: border-box;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-height: 100px; box-sizing: border-box;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="bottom: 0;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="bottom: 0;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="bottom: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="bottom: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="height: 100px; bottom: 0;" data-expected-height="144" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="100" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-height: 100px; bottom: 0;" data-expected-height="144" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="100" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="height: 100px; bottom: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-height: 100px; bottom: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeWidth" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="width: 200px;" data-expected-height="100" class="grid wholeHeight" data-expected-width="246">
+    <div data-expected-height="56" class="item" data-expected-width="200"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-width: 200px;" data-expected-height="100" class="grid wholeHeight" data-expected-width="246">
+    <div data-expected-height="56" class="item" data-expected-width="200"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="width: 200px; box-sizing: border-box;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-width: 200px; box-sizing: border-box;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="right: 0;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="right: 0;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="right: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="right: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="width: 200px; right: 0;" data-expected-height="100" class="grid wholeHeight" data-expected-width="246">
+    <div data-expected-height="56" class="item" data-expected-width="200"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-width: 200px; right: 0;" data-expected-height="100" class="grid wholeHeight" data-expected-width="246">
+    <div data-expected-height="56" class="item" data-expected-width="200"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="width: 200px; right: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+<div class="wrapper">
+  <div style="min-width: 200px; right: 0; box-sizing: border-box;" data-expected-height="100" class="grid wholeHeight" data-expected-width="200">
+    <div data-expected-height="56" class="item" data-expected-width="154"></div>
+  </div>
+</div>
+
+
+</body></html>
