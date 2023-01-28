@@ -411,15 +411,16 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			}
 		}
-	case "ul":
-		// move right, defer to li to look back upward at ul to determine its prefix
+	case "ul", "ol":
+		// move right, defer to li to look back upward at ul or ol to determine its prefix
 		// todo: this number appears to be too big compared to firefox; I think padding doesn't take into account the bullet width
 		padding, _ := parseLength(node.Style["padding-left"])
 		childDrawzoneModifier[0] = padding
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, 16})
-	case "li":
-		switch node.Raw.Parent.Data {
-		case "ul":
+	case "li": // https://www.rfc-editor.org/rfc/rfc1866#section-5.6
+		listType := node.Raw.Parent.Data
+		switch listType {
+		case "ul", "ol":
 			if node.FirstChild != nil {
 				text := node.FirstChild.Raw.Data
 				textSize := 16.0
@@ -429,25 +430,35 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 
 				textVBuffer := textSize / 5 // todo: where is this from?
 
-				// draw bullet
-				bulletRadius := textSize / 2
-				bulletOffset := textSize / 3
-				render.DrawCircle(sp.GetRGBA(), getTextColor(node.FirstChild), bulletRadius/2, 1, drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
+				prefixGap := 0.0
+				// if this is a ul then draw a bullet
+				if listType == "ul" {
 
-				// TODO: this number
-				bulletGap := bulletRadius * 2
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
+					bulletRadius := textSize / 2
+					bulletOffset := textSize / 3
+					render.DrawCircle(sp.GetRGBA(), getTextColor(node.FirstChild), bulletRadius/2, 1, drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
+					// TODO: this number
+					prefixGap = bulletRadius * 2
+				} else if listType == "ol" {
+					// TODO: Check styles to determine if this should be numbers or letters.
+					// TODO: Consider precomputing to make this more performant
+					placeInOrder := countInSequence(node.Raw)
+					text = fmt.Sprintf("%d. %s", placeInOrder, text)
+				}
 
-				// todo: is this the background of ul or the background of the text content child?
+				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{prefixGap, 0})
+
+				// todo: is this the background of the list or the background of the text content child?
 				// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
 				drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
 
 				// draw text
 				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
 				draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
+				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-prefixGap, textVBuffer + float64(bds.Dy())})
 			}
 		}
+
 	case "table":
 		// TODO: thead
 		// TODO: tfoot
@@ -614,4 +625,19 @@ type hasBounds interface {
 	// Bounds returns the domain for which At can return non-zero color.
 	// The bounds do not necessarily contain the point (0, 0).
 	Bounds() image.Rectangle
+}
+
+// countInSequence is a convience method for determining where you rate in your parent node's list
+// consider removing this if it is determined that it is only useful for <li> sequences.
+// Starts at 1 to be easily passed to list numbering.
+func countInSequence(rawNode *html.Node) int {
+	if rawNode == nil {
+		return 0
+	}
+	// TODO: Determine why li gets parsed into a li and a text node
+	// Skip counts of text nodes as they dont increment a sequence
+	if rawNode.Type == html.TextNode {
+		return countInSequence(rawNode.PrevSibling)
+	}
+	return 1 + countInSequence(rawNode.PrevSibling)
 }
