@@ -76,8 +76,9 @@ func ParseSelector(s string) (Selector, error) {
 	}
 	// utf8?
 	var next []rune
-	var nextIsID, nextIsClass, nextIsAttribute bool
+	var nextIsID, nextIsClass, nextIsAttribute, possibleWhitespaceTrailer bool
 	for i, c := range s {
+		possibleWhitespaceTrailer = false
 		switch c {
 		case '[':
 			// TODO: are some of these conditions workable?
@@ -94,7 +95,7 @@ func ParseSelector(s string) (Selector, error) {
 			sel.Attribute = string(next)
 			next = []rune{}
 			nextIsAttribute = false
-		case '#':
+		case '#': //https://www.w3.org/TR/selectors-3/#id-selectors
 			if sel.ID != "" || nextIsID {
 				return sel, ErrInvalidSelector
 			}
@@ -133,8 +134,13 @@ func ParseSelector(s string) (Selector, error) {
 			}
 			nextIsID = false
 			nextIsClass = true
-		case ' ', '\n', '\t', '\r':
+		case '\n', '\t', '\r':
 			return sel, ErrInvalidSelector
+		case ' ':
+			// https://www.w3.org/TR/selectors-3/#descendant-combinators https://www.w3.org/TR/selectors-3/#child-combinators https://www.w3.org/TR/selectors-3/#adjacent-sibling-combinators https://www.w3.org/TR/selectors-3/#general-sibling-combinators
+			// Now searching for the next reserved character to determine how we need to parse
+			// whitespace is optional in these cases but is illegal if it is the only set.
+			possibleWhitespaceTrailer = true
 		default:
 			// utf8?
 			if c > unicode.MaxASCII {
@@ -142,6 +148,11 @@ func ParseSelector(s string) (Selector, error) {
 			}
 			next = append(next, c)
 		}
+	}
+	// we throw away anything that trails whitespace or is solely constructed from whitespace.
+	// TODO: spec for why?
+	if possibleWhitespaceTrailer {
+		return sel, ErrInvalidSelector
 	}
 	if len(next) != 0 {
 		if nextIsAttribute {
