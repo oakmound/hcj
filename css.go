@@ -175,13 +175,9 @@ func ParseSelector(s string) (Selector, error) {
 		case SelectorTokenTypeGlobal:
 			if i == 1 {
 				sel.Global = true
-				_, err := tkz.Next()
-				if !errors.Is(err, io.EOF) {
-					return sel, fmt.Errorf("invalid: global * and additional content")
-				}
-				return sel, nil
+			} else {
+				return sel, fmt.Errorf("invalid: global * after selector start")
 			}
-			return sel, fmt.Errorf("invalid: global * after selector start")
 		case SelectorTokenTypeIDStart:
 			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
 			if err != nil {

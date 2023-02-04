@@ -19,6 +19,12 @@ func TestParseSelector(t *testing.T) {
 				Global: true,
 			},
 		}, {
+			input: "*.t1",
+			expected: Selector{
+				Global:  true,
+				Classes: []string{"t1"},
+			},
+		}, {
 			input: "tag",
 			expected: Selector{
 				Tag: "tag",
