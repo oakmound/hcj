@@ -154,20 +154,18 @@ var ErrInvalidSelector = fmt.Errorf("invalid selector")
 func ParseSelector(s string) (Selector, error) {
 	sel := Selector{}
 	tkz := TokenizeSelector(s)
-	firstRead := true
 	i := 0
 	for {
 		i++
 		tok, err := tkz.Next()
-		fmt.Println(i, tok.Type, string(tok.Raw), len(tok.Raw))
+		//fmt.Println(tok, err, tok.Type.String(), string(tok.Raw))
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return sel, err
 		}
-		if firstRead && tok.Type == SelectorTokenTypeIdentifier {
-			fmt.Printf("setting token %q\n", string(tok.Raw))
+		if i == 1 && tok.Type == SelectorTokenTypeIdentifier {
 			sel.Tag = string(tok.Raw)
 			continue
 		}
@@ -175,25 +173,24 @@ func ParseSelector(s string) (Selector, error) {
 		case SelectorTokenTypeIdentifier:
 			return sel, fmt.Errorf("impossible: identifier with no qualifier %q", string(tok.Raw))
 		case SelectorTokenTypeGlobal:
-			if firstRead {
+			if i == 1 {
 				sel.Global = true
+				_, err := tkz.Next()
+				if !errors.Is(err, io.EOF) {
+					return sel, fmt.Errorf("invalid: global * and additional content")
+				}
 				return sel, nil
 			}
 			return sel, fmt.Errorf("invalid: global * after selector start")
 		case SelectorTokenTypeIDStart:
-			fmt.Println("got id")
 			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
 			if err != nil {
-				fmt.Println("got id :(", string(id.Raw))
 				return sel, err
 			}
-			fmt.Println("got id!", string(id.Raw))
 			sel.IDs = append(sel.IDs, string(id.Raw))
 		case SelectorTokenTypeClassStart:
-			fmt.Println("got class")
 			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
 			if err != nil {
-				fmt.Println("got class :(", string(id.Raw))
 				return sel, err
 			}
 			sel.Classes = append(sel.Classes, string(id.Raw))
@@ -222,7 +219,8 @@ func ParseSelector(s string) (Selector, error) {
 			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
 			if err != nil {
 				if id.Type == SelectorTokenTypePseudoClassStart {
-					// pseudo element, OK
+					// pseudo element, OK, but not supported yet
+					return sel, fmt.Errorf("pseudo elements are unimplemented")
 				} else {
 					return sel, err
 				}
@@ -232,17 +230,7 @@ func ParseSelector(s string) (Selector, error) {
 				Type: stringToPseudoClassType(string(id.Raw)),
 			}
 			switch string(id.Raw) {
-			case "lang":
-				fallthrough
-			case "not":
-				fallthrough
-			case "nth-child":
-				fallthrough
-			case "nth-last-child":
-				fallthrough
-			case "nth-last-of-type":
-				fallthrough
-			case "nth-of-type":
+			case "lang", "not", "nth-child", "nth-last-child", "nth-last-of-type", "nth-of-type":
 				_, err := tkz.ExpectNext(SelectorTokenTypeSubSelectorStart)
 				if err != nil {
 					return sel, err
@@ -254,7 +242,7 @@ func ParseSelector(s string) (Selector, error) {
 					if err != nil {
 						return sel, fmt.Errorf("error parsing sub selector: %w", err)
 					}
-					if t2.Type == SelectorTokenTypeAttributeStop {
+					if t2.Type == SelectorTokenTypeSubSelectorStop {
 						break
 					}
 					subSel = append(subSel, t2.Raw...)

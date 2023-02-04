@@ -140,6 +140,8 @@ func (sts selectorTokenStream) Next() (tok SelectorToken, err error) {
 		tok.Type = SelectorTokenTypeSubsequentSiblingStart
 	case '|':
 		tok.Type = SelectorTokenTypeOr
+	case '\r', '\n', '\t':
+		return tok, ErrInvalidSelector
 	}
 	if tok.Type != SelectorTokenTypeIdentifier {
 		return tok, nil
@@ -153,7 +155,9 @@ func (sts selectorTokenStream) Next() (tok SelectorToken, err error) {
 			return SelectorToken{}, fmt.Errorf("failed to read: %w", err)
 		}
 		switch b {
-		case '.', ':', '[', ']', '#', ' ', '(', ')', '>', '+', '~', '|':
+		case '\r', '\n', '\t':
+			return tok, ErrInvalidSelector
+		case '*', '.', ':', '[', ']', '#', ' ', '(', ')', '>', '+', '~', '|':
 			sts.r.UnreadByte()
 			return tok, nil
 		}
