@@ -7,6 +7,7 @@ import (
 	"golang.org/x/net/html"
 )
 
+// ParsedNode is the internal hcj representation of an html node.
 type ParsedNode struct {
 	Raw              *html.Node
 	Tag              string
@@ -21,13 +22,15 @@ type ParsedNode struct {
 	// LastChild
 	NextSibling *ParsedNode
 	// LastSibling
-	//Parent *ParsedNode
+	// Parent *ParsedNode
 }
 
 func (pn *ParsedNode) String() string {
 
 	return pn.NestedString(0)
 }
+
+// NestedString is a convience method for attempting to pretty print a ParsedNode
 func (pn *ParsedNode) NestedString(indent int) string {
 	out := ""
 	nest := ""
@@ -133,7 +136,7 @@ INHERIT_LOOP:
 	}
 	if node.FirstChild != nil {
 		pn.FirstChild = ParseNode(node.FirstChild, WithCSS(cfg.CSS), WithParentStyle(pn.Style))
-		//pn.FirstChild.setParent(pn)
+		// pn.FirstChild.setParent(pn)
 	}
 	if node.NextSibling != nil {
 		pn.NextSibling = ParseNode(node.NextSibling, WithCSS(cfg.CSS), WithParentStyle(cfg.ParentStyle))
@@ -141,6 +144,9 @@ INHERIT_LOOP:
 	return pn
 }
 
+// setParent reference on the node.
+// This may be removable in the future if the full set of inheritance is understood.
+// May be needed to determine parent node type and what implicit changes that poses.
 // func (pn *ParsedNode) setParent(parent *ParsedNode) {
 // 	pn.Parent = parent
 // 	if pn.NextSibling != nil {
@@ -148,6 +154,7 @@ INHERIT_LOOP:
 // 	}
 // }
 
+// styleWithPriority contains a decided on style
 type styleWithPriority struct {
 	priority int16 // max ~1000
 	style    map[string]string
