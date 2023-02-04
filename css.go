@@ -1,6 +1,7 @@
 package hcj
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -58,11 +59,13 @@ func (c CSS) Merge(c2 CSS) CSS {
 }
 
 type Selector struct {
-	Tag       string
-	IDs       []string
-	Attribute string
-	Classes   []string
-	Global    bool
+	Tag         string
+	IDs         []string
+	Attribute   string
+	Classes     []string
+	Global      bool
+	Type        string // internal debugging mapping probably map to enum but... laziness
+	SubSelector *Selector
 }
 
 var ErrInvalidSelector = fmt.Errorf("invalid selector")
@@ -74,10 +77,13 @@ func ParseSelector(s string) (Selector, error) {
 			Global: true,
 		}, nil
 	}
+	if len(s) == 0 {
+		return sel, errors.New("selectors should have length")
+	}
 	// utf8?
 	var next []rune
 	var nextIsID, nextIsClass, nextIsAttribute, possibleWhitespaceTrailer bool
-	for _, c := range s {
+	for i, c := range s {
 		possibleWhitespaceTrailer = false
 		switch c {
 		case '[':
@@ -85,6 +91,8 @@ func ParseSelector(s string) (Selector, error) {
 			if nextIsID || nextIsAttribute || nextIsClass || len(next) == 0 {
 				return sel, ErrInvalidSelector
 			}
+			// https://www.w3.org/TR/2018/REC-selectors-3-20181106/#class-html
+
 			sel.Tag = string(next)
 			next = []rune{}
 			nextIsAttribute = true
@@ -138,6 +146,28 @@ func ParseSelector(s string) (Selector, error) {
 			// Now searching for the next reserved character to determine how we need to parse
 			// whitespace is optional in these cases but is illegal if it is the only set.
 			possibleWhitespaceTrailer = true
+
+		case '+':
+			sel.Type = "E + F"
+
+		// broken until we use a tokenizer // https://www.w3.org/TR/2018/REC-selectors-3-20181106/#class-html
+
+		// case '~':
+
+		// 	if nextIsAttribute {
+
+		// 	}
+		// 	// maybe is type
+		// 	sel.Type = "E ~ F"
+		case '>':
+			sel.Type = "E > F"
+			subSelect, err := ParseSelector(s[i+1:])
+			if err != nil {
+				return sel, fmt.Errorf("from subselector: %s", err.Error())
+			}
+			sel.SubSelector = &subSelect
+			goto AFTERITER
+
 		default:
 			// utf8?
 			if c > unicode.MaxASCII {
@@ -146,6 +176,7 @@ func ParseSelector(s string) (Selector, error) {
 			next = append(next, c)
 		}
 	}
+AFTERITER:
 	// we throw away anything that trails whitespace or is solely constructed from whitespace.
 	// TODO: spec for why?
 	if possibleWhitespaceTrailer {
