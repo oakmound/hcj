@@ -1,42 +1,125 @@
 package hcj
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
-	"unicode"
 )
 
-type PseudoClass uint8
+type PseudoClassType uint8
 
 // PseudoClasses
 const (
-	PseudoClassActive      PseudoClass = iota
-	PseudoClassChecked     PseudoClass = iota
-	PseudoClassDisabled    PseudoClass = iota
-	PseudoClassEmpty       PseudoClass = iota
-	PseudoClassEnabled     PseudoClass = iota
-	PseudoClassFirstChild  PseudoClass = iota
-	PseudoClassFirstOfType PseudoClass = iota
-	PseudoClassFocus       PseudoClass = iota
-	PseudoClassHover       PseudoClass = iota
-	PseudoClassInRange     PseudoClass = iota
-	PseudoClassInvalid     PseudoClass = iota
-	PseudoClassLastChild   PseudoClass = iota
-	PseudoClassLastOfType  PseudoClass = iota
-	PseudoClassLink        PseudoClass = iota
-	PseudoClassOnlyOfType  PseudoClass = iota
-	PseudoClassOnlyChild   PseudoClass = iota
-	PseudoClassOptional    PseudoClass = iota
-	PseudoClassOutOfRange  PseudoClass = iota
-	PseudoClassReadOnly    PseudoClass = iota
-	PseudoClassReadWrite   PseudoClass = iota
-	PseudoClassRequired    PseudoClass = iota
-	PseudoClassRoot        PseudoClass = iota
-	PseudoClassTarget      PseudoClass = iota
-	PseudoClassValid       PseudoClass = iota
-	PseudoClassVisited     PseudoClass = iota
+	PseudoClassTypeUnknown       PseudoClassType = iota
+	PseudoClassTypeActive        PseudoClassType = iota
+	PseudoClassTypeChecked       PseudoClassType = iota
+	PseudoClassTypeDisabled      PseudoClassType = iota
+	PseudoClassTypeEmpty         PseudoClassType = iota
+	PseudoClassTypeEnabled       PseudoClassType = iota
+	PseudoClassTypeFirstChild    PseudoClassType = iota
+	PseudoClassTypeFirstOfType   PseudoClassType = iota
+	PseudoClassTypeFocus         PseudoClassType = iota
+	PseudoClassTypeHover         PseudoClassType = iota
+	PseudoClassTypeInRange       PseudoClassType = iota
+	PseudoClassTypeInvalid       PseudoClassType = iota
+	PseudoClassTypeLang          PseudoClassType = iota
+	PseudoClassTypeLastChild     PseudoClassType = iota
+	PseudoClassTypeLastOfType    PseudoClassType = iota
+	PseudoClassTypeLink          PseudoClassType = iota
+	PseudoClassTypeNot           PseudoClassType = iota
+	PseudoClassTypeNthChild      PseudoClassType = iota
+	PseudoClassTypeNthLastChild  PseudoClassType = iota
+	PseudoClassTypeNthLastOfType PseudoClassType = iota
+	PseudoClassTypeNthOfType     PseudoClassType = iota
+	PseudoClassTypeOnlyOfType    PseudoClassType = iota
+	PseudoClassTypeOnlyChild     PseudoClassType = iota
+	PseudoClassTypeOptional      PseudoClassType = iota
+	PseudoClassTypeOutOfRange    PseudoClassType = iota
+	PseudoClassTypeReadOnly      PseudoClassType = iota
+	PseudoClassTypeReadWrite     PseudoClassType = iota
+	PseudoClassTypeRequired      PseudoClassType = iota
+	PseudoClassTypeRoot          PseudoClassType = iota
+	PseudoClassTypeTarget        PseudoClassType = iota
+	PseudoClassTypeValid         PseudoClassType = iota
+	PseudoClassTypeVisited       PseudoClassType = iota
+	// TODO: pseudo elements
 )
+
+type PseudoClass struct {
+	Type        PseudoClassType
+	SubSelector Selector
+}
+
+func stringToPseudoClassType(s string) PseudoClassType {
+	switch s {
+	case "active":
+		return PseudoClassTypeActive
+	case "checked":
+		return PseudoClassTypeChecked
+	case "disabled":
+		return PseudoClassTypeDisabled
+	case "empty":
+		return PseudoClassTypeEmpty
+	case "enabled":
+		return PseudoClassTypeEnabled
+	case "first-child":
+		return PseudoClassTypeFirstChild
+	case "first-of-type":
+		return PseudoClassTypeFirstOfType
+	case "focus":
+		return PseudoClassTypeFocus
+	case "hover":
+		return PseudoClassTypeHover
+	case "in-rage":
+		return PseudoClassTypeInRange
+	case "invalid":
+		return PseudoClassTypeInvalid
+	case "lang":
+		return PseudoClassTypeLang
+	case "last-child":
+		return PseudoClassTypeLastChild
+	case "last-of-type":
+		return PseudoClassTypeLastOfType
+	case "link":
+		return PseudoClassTypeLink
+	case "not":
+		return PseudoClassTypeNot
+	case "nth-child":
+		return PseudoClassTypeNthChild
+	case "nth-last-child":
+		return PseudoClassTypeNthLastChild
+	case "nth-last-of-type":
+		return PseudoClassTypeNthLastOfType
+	case "nth-of-type":
+		return PseudoClassTypeNthOfType
+	case "only-of-type":
+		return PseudoClassTypeOnlyOfType
+	case "only-child":
+		return PseudoClassTypeOnlyChild
+	case "optional":
+		return PseudoClassTypeOptional
+	case "out-of-range":
+		return PseudoClassTypeOutOfRange
+	case "read-only":
+		return PseudoClassTypeReadOnly
+	case "read-write":
+		return PseudoClassTypeReadWrite
+	case "required":
+		return PseudoClassTypeRequired
+	case "root":
+		return PseudoClassTypeRoot
+	case "target":
+		return PseudoClassTypeTarget
+	case "valid":
+		return PseudoClassTypeValid
+	case "visited":
+		return PseudoClassTypeVisited
+	default:
+		return PseudoClassTypeUnknown
+	}
+}
 
 // we don't support !important
 
@@ -58,98 +141,145 @@ func (c CSS) Merge(c2 CSS) CSS {
 }
 
 type Selector struct {
-	Tag       string
- 	IDs       []string
-	Attribute string
-	Classes   []string
-	Global    bool
+	Tag           string
+	IDs           []string
+	Attribute     string
+	Classes       []string
+	Global        bool
+	PseudoClasses []PseudoClass
 }
 
 var ErrInvalidSelector = fmt.Errorf("invalid selector")
 
 func ParseSelector(s string) (Selector, error) {
 	sel := Selector{}
-	if s == "*" {
-		return Selector{
-			Global: true,
-		}, nil
-	}
-	// utf8?
-	var next []rune
-	var nextIsID, nextIsClass, nextIsAttribute bool
-	for _, c := range s {
-		switch c {
-		case '[':
-			// TODO: are some of these conditions workable?
-			if nextIsID || nextIsAttribute || nextIsClass || len(next) == 0 {
-				return sel, ErrInvalidSelector
+	tkz := TokenizeSelector(s)
+	firstRead := true
+	i := 0
+	for {
+		i++
+		tok, err := tkz.Next()
+		fmt.Println(i, tok.Type, string(tok.Raw), len(tok.Raw))
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return sel, err
+		}
+		if firstRead && tok.Type == SelectorTokenTypeIdentifier {
+			fmt.Printf("setting token %q\n", string(tok.Raw))
+			sel.Tag = string(tok.Raw)
+			continue
+		}
+		switch tok.Type {
+		case SelectorTokenTypeIdentifier:
+			return sel, fmt.Errorf("impossible: identifier with no qualifier %q", string(tok.Raw))
+		case SelectorTokenTypeGlobal:
+			if firstRead {
+				sel.Global = true
+				return sel, nil
 			}
-			sel.Tag = string(next)
-			next = []rune{}
-			nextIsAttribute = true
-		case ']':
-			if !nextIsAttribute || len(next) == 0 {
-				return sel, ErrInvalidSelector
+			return sel, fmt.Errorf("invalid: global * after selector start")
+		case SelectorTokenTypeIDStart:
+			fmt.Println("got id")
+			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
+			if err != nil {
+				fmt.Println("got id :(", string(id.Raw))
+				return sel, err
 			}
-			sel.Attribute = string(next)
-			next = []rune{}
-			nextIsAttribute = false
-		case '#':
-			if len(next) == 0 && (nextIsClass || nextIsID) {
-				// invalid .# or ##
-				return sel, ErrInvalidSelector
-			} else if len(next) != 0 {
-				if nextIsClass {
-					sel.Classes = append(sel.Classes, string(next))
-					next = []rune{}
-				} else if nextIsID {
-					sel.IDs = append(sel.IDs, string(next))
-					next = []rune{}
+			fmt.Println("got id!", string(id.Raw))
+			sel.IDs = append(sel.IDs, string(id.Raw))
+		case SelectorTokenTypeClassStart:
+			fmt.Println("got class")
+			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
+			if err != nil {
+				fmt.Println("got class :(", string(id.Raw))
+				return sel, err
+			}
+			sel.Classes = append(sel.Classes, string(id.Raw))
+		case SelectorTokenTypeAttributeStart:
+			if sel.Attribute != "" {
+				return sel, fmt.Errorf("duplicate attribute definition")
+			}
+			attr := []byte{}
+			for {
+				// attributes may contain characters normally associated with
+				// non-identifier selector types e.g. *; treat as a comment
+				// and grab the entire contents to be parsed later
+				t2, err := tkz.Next()
+				if err != nil {
+					return sel, fmt.Errorf("error parsing attribute: %w", err)
+				}
+				if t2.Type == SelectorTokenTypeAttributeStop {
+					break
+				}
+				attr = append(attr, t2.Raw...)
+			}
+			sel.Attribute = string(attr)
+		case SelectorTokenTypeAttributeStop:
+			return sel, fmt.Errorf("attribute stop without matching start")
+		case SelectorTokenTypePseudoClassStart:
+			id, err := tkz.ExpectNext(SelectorTokenTypeIdentifier)
+			if err != nil {
+				if id.Type == SelectorTokenTypePseudoClassStart {
+					// pseudo element, OK
 				} else {
-					sel.Tag = string(next)
-					next = []rune{}
+					return sel, err
 				}
 			}
-			nextIsClass = false
-			nextIsID = true
-		case '.':
-			if len(next) == 0 && (nextIsClass || nextIsID) {
-				// invalid #. or ..
-				return sel, ErrInvalidSelector
-			} else if len(next) != 0 {
-				if nextIsClass {
-					sel.Classes = append(sel.Classes, string(next))
-					next = []rune{}
-				} else if nextIsID {
-					sel.IDs = append(sel.IDs, string(next))
-					next = []rune{}
-				} else {
-					sel.Tag = string(next)
-					next = []rune{}
+			// some psuedo classes have sub selectors
+			pc := PseudoClass{
+				Type: stringToPseudoClassType(string(id.Raw)),
+			}
+			switch string(id.Raw) {
+			case "lang":
+				fallthrough
+			case "not":
+				fallthrough
+			case "nth-child":
+				fallthrough
+			case "nth-last-child":
+				fallthrough
+			case "nth-last-of-type":
+				fallthrough
+			case "nth-of-type":
+				_, err := tkz.ExpectNext(SelectorTokenTypeSubSelectorStart)
+				if err != nil {
+					return sel, err
 				}
+				subSel := []byte{}
+				for {
+					// TODO: this does not support nested sub selectors
+					t2, err := tkz.Next()
+					if err != nil {
+						return sel, fmt.Errorf("error parsing sub selector: %w", err)
+					}
+					if t2.Type == SelectorTokenTypeAttributeStop {
+						break
+					}
+					subSel = append(subSel, t2.Raw...)
+				}
+				parsed, err := ParseSelector(string(subSel))
+				if err != nil {
+					return sel, fmt.Errorf("error parsing sub selector: %w", err)
+				}
+				pc.SubSelector = parsed
+			default:
+				// no sub selector
 			}
-			nextIsID = false
-			nextIsClass = true
-		case ' ', '\n', '\t', '\r':
-			return sel, ErrInvalidSelector
-		default:
-			// utf8?
-			if c > unicode.MaxASCII {
-				return sel, ErrInvalidSelector
-			}
-			next = append(next, c)
-		}
-	}
-	if len(next) != 0 {
-		if nextIsAttribute {
-			return sel, ErrInvalidSelector
-		}
-		if nextIsClass {
-			sel.Classes = append(sel.Classes, string(next))
-		} else if nextIsID {
-			sel.IDs = append(sel.IDs, string(next))
-		} else {
-			sel.Tag = string(next)
+			sel.PseudoClasses = append(sel.PseudoClasses, pc)
+		case SelectorTokenTypeSubSelectorStart:
+			return sel, fmt.Errorf("sub-selector start outside of pseudo-class")
+		case SelectorTokenTypeSubSelectorStop:
+			return sel, fmt.Errorf("sub-selector stop outside of pseudo-class")
+		case SelectorTokenTypeDescendantStart:
+			return sel, fmt.Errorf("descendants are unimplemented")
+		case SelectorTokenTypeChildStart:
+			return sel, fmt.Errorf("children are unimplemented")
+		case SelectorTokenTypeNextSiblingStart:
+			return sel, fmt.Errorf("next siblings are unimplemented")
+		case SelectorTokenTypeSubsequentSiblingStart:
+			return sel, fmt.Errorf("subsequent siblings are unimplemented")
 		}
 	}
 	return sel, nil

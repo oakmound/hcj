@@ -8,16 +8,12 @@ import (
 )
 
 type ParsedNode struct {
-	Raw              *html.Node
-	Tag              string
-	ID               string
-	Classes          []string
-	Style            map[string]string
-	PseudoClassStyle map[PseudoClass]map[string]string
-	// PseudoClassSupers are PseudoClasses with parameters like lang(in)
-	// they are not supported yet
-	PseudoClassSuperStyle map[string]map[string]string
-	FirstChild            *ParsedNode
+	Raw        *html.Node
+	Tag        string
+	ID         string
+	Classes    []string
+	Style      map[string]string
+	FirstChild *ParsedNode
 	// LastChild
 	NextSibling *ParsedNode
 	// LastSibling

@@ -103,9 +103,6 @@ func TestParseSelectorInvalid(t *testing.T) {
 	}
 	tcs := []testCase{
 		{
-			input: "\u0500",
-		},
-		{
 			input: "\n",
 		},
 		{
