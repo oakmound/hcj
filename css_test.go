@@ -19,6 +19,12 @@ func TestParseSelector(t *testing.T) {
 				Global: true,
 			},
 		}, {
+			input: "*.t1",
+			expected: Selector{
+				Global:  true,
+				Classes: []string{"t1"},
+			},
+		}, {
 			input: "tag",
 			expected: Selector{
 				Tag: "tag",
@@ -78,6 +84,21 @@ func TestParseSelector(t *testing.T) {
 				Tag:       "a",
 				Attribute: "target",
 			},
+		}, {
+			input: "a:not(#b)",
+			expected: Selector{
+				Tag: "a",
+				PseudoClasses: []PseudoClass{
+					{
+						Type: PseudoClassTypeNot,
+						SubSelector: Selector{
+							IDs: []string{
+								"b",
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 	for i, tc := range tcs {
@@ -103,9 +124,6 @@ func TestParseSelectorInvalid(t *testing.T) {
 	}
 	tcs := []testCase{
 		{
-			input: "\u0500",
-		},
-		{
 			input: "\n",
 		},
 		{
@@ -129,16 +147,40 @@ func TestParseSelectorInvalid(t *testing.T) {
 		{
 			input: "#.",
 		},
-		// {
-		// 	input: ".class1.class2",
-		// },
-		// {
-		// 	input: ".class1",
-		// },
+		{
+			input: "tag*",
+		},
+		{
+			input: "**",
+		},
+		{
+			input: "tag[a1][a2]",
+		},
+		{
+			input: "tag[unclosed",
+		},
+		{
+			input: "noattrstart]",
+		},
+		{
+			input: "emptypseudoclass:",
+		},
+		{
+			input: "unimplementedpseudoelement::",
+		},
+		{
+			input: "unqualified:not",
+		},
+		{
+			input: "unterminated:not(abc",
+		},
+		{
+			input: "invalidsub:not(\t)",
+		},
 	}
 	for i, tc := range tcs {
 		tc := tc
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(strconv.Itoa(i)+tc.input, func(t *testing.T) {
 			t.Parallel()
 			_, err := ParseSelector(tc.input)
 			if err == nil {
@@ -168,7 +210,19 @@ func SelectorsEqual(s1, s2 Selector) error {
 	}
 	for i, c1 := range s1.Classes {
 		if s2.Classes[i] != c1 {
-			return fmt.Errorf("mismatched class at index %d : %v vs %v", i, len(s1.Classes), len(s2.Classes))
+			return fmt.Errorf("mismatched class at index %d : %v vs %v", i, c1, s2.Classes[i])
+		}
+	}
+	if len(s1.PseudoClasses) != len(s2.PseudoClasses) {
+		return fmt.Errorf("mismatched pseudo-class length : %v vs %v", len(s1.PseudoClasses), len(s2.PseudoClasses))
+	}
+	for i, pc1 := range s1.PseudoClasses {
+		pc2 := s2.PseudoClasses[i]
+		if pc1.Type != pc2.Type {
+			return fmt.Errorf("mismatched pseudoclass type at index %d : %v vs %v", i, pc1.Type, pc2.Type)
+		}
+		if err := SelectorsEqual(pc1.SubSelector, pc2.SubSelector); err != nil {
+			return fmt.Errorf("mismatched pseudoclass sub selector at index %d : %w", i, err)
 		}
 	}
 	return nil

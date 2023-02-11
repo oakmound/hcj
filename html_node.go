@@ -8,16 +8,12 @@ import (
 )
 
 type ParsedNode struct {
-	Raw              *html.Node
-	Tag              string
-	ID               string
-	Classes          []string
-	Style            map[string]string
-	PseudoClassStyle map[PseudoClass]map[string]string
-	// PseudoClassSupers are PseudoClasses with parameters like lang(in)
-	// they are not supported yet
-	PseudoClassSuperStyle map[string]map[string]string
-	FirstChild            *ParsedNode
+	Raw        *html.Node
+	Tag        string
+	ID         string
+	Classes    []string
+	Style      map[string]string
+	FirstChild *ParsedNode
 	// LastChild
 	NextSibling *ParsedNode
 	// LastSibling
@@ -153,6 +149,56 @@ type styleWithPriority struct {
 	style    map[string]string
 }
 
+func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
+	priority := int16(0)
+	for _, id := range sel.IDs {
+		if pn.ID == id {
+			priority += 100
+		} else {
+			return -1000
+		}
+	}
+	if sel.Tag == pn.Tag {
+		priority += 1
+	}
+	for _, c2 := range sel.Classes {
+		match := false
+		for _, c := range pn.Classes {
+			if c == c2 {
+				match = true
+				priority += 10
+				break
+			}
+		}
+		if !match {
+			priority = -1000
+		}
+	}
+	if sel.Attribute != "" {
+		matcher, err := ParseAttributeSelector(sel.Attribute)
+		if err != nil {
+			return -1000
+		}
+		if matcher.Match(pn) {
+			priority += 10
+		} else {
+			return -1000
+		}
+	}
+	for _, pc := range sel.PseudoClasses {
+		// TODO: implement more pseudo class support
+		switch pc.Type {
+		case PseudoClassTypeNot:
+			pcPriority := pn.SelectorPriority(pc.SubSelector)
+			// TODO: this is not sufficient
+			if pcPriority >= 0 {
+				return -1000
+			}
+		}
+	}
+	return priority
+}
+
 func (pn *ParsedNode) CalculateStyle(css CSS) {
 	styles := []styleWithPriority{}
 	for selStr, style := range css.Selectors {
@@ -160,48 +206,8 @@ func (pn *ParsedNode) CalculateStyle(css CSS) {
 		if err != nil {
 			continue
 		}
-		priority := int16(0)
-		if sel.Global {
-			styles = append(styles, styleWithPriority{
-				priority: priority,
-				style:    style,
-			})
-			continue
-		}
-		for _, id := range sel.IDs {
-			if pn.ID == id {
-				priority += 100
-			} else {
-				priority = -1000
-			}
-		}
-		if sel.Tag == pn.Tag {
-			priority += 1
-		}
-		for _, c2 := range sel.Classes {
-			match := false
-			for _, c := range pn.Classes {
-				if c == c2 {
-					match = true
-					priority += 10
-					break
-				}
-			}
-			if !match {
-				priority = -1000
-			}
-		}
-		if sel.Attribute != "" {
-			matcher, err := ParseAttributeSelector(sel.Attribute)
-			if err != nil {
-				continue
-			}
-			if matcher.Match(pn) {
-				priority += 10
-			} else {
-				priority = -1000
-			}
-		}
+
+		priority := pn.SelectorPriority(sel)
 		if priority > 0 {
 			styles = append(styles, styleWithPriority{
 				priority: priority,
