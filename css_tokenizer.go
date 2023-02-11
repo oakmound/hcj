@@ -161,6 +161,13 @@ func (sts selectorTokenStream) Next() (tok SelectorToken, err error) {
 			return SelectorToken{}, fmt.Errorf("failed to read: %w", err)
 		}
 		switch b {
+		case '\\':
+			// escape the following character
+			b2, err := sts.r.ReadByte()
+			if err == io.EOF {
+				return SelectorToken{}, io.ErrUnexpectedEOF
+			}
+			b = b2
 		case '\r', '\n', '\t':
 			return tok, ErrInvalidSelector
 		case '*', '.', ':', '[', ']', '#', ' ', '(', ')', '>', '+', '~', '|':
