@@ -150,7 +150,10 @@ type styleWithPriority struct {
 }
 
 func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
-	priority := int16(0)
+	priority := int16(-1)
+	if sel.Global {
+		priority = 1
+	}
 	for _, id := range sel.IDs {
 		if pn.ID == id {
 			priority += 100
@@ -159,7 +162,9 @@ func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
 		}
 	}
 	if sel.Tag == pn.Tag {
-		priority += 1
+		priority += 2
+	} else if sel.Tag != "" {
+		return -1000
 	}
 	for _, c2 := range sel.Classes {
 		match := false
@@ -191,8 +196,11 @@ func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
 		case PseudoClassTypeNot:
 			pcPriority := pn.SelectorPriority(pc.SubSelector)
 			// TODO: this is not sufficient
-			if pcPriority >= 0 {
+			if pcPriority > 0 {
 				return -1000
+			} else {
+				// todo: how much?
+				priority += 1
 			}
 		}
 	}

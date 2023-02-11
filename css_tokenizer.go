@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -145,6 +146,11 @@ func (sts selectorTokenStream) Next() (tok SelectorToken, err error) {
 	}
 	if tok.Type != SelectorTokenTypeIdentifier {
 		return tok, nil
+	}
+	// We've now determined this is an identifier
+	// Identifiers cannot begin with numbers (css3-modsel-155)
+	if unicode.IsDigit(rune(b1)) {
+		return tok, ErrInvalidSelector
 	}
 	for {
 		b, err := sts.r.ReadByte()
