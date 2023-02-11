@@ -28,12 +28,17 @@ func RenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*render.Sprite, erro
 // ParseAndRenderHTML outputting the internal Node representation along with a sprite that has
 // the given dimensions.
 func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode, *render.Sprite, error) {
+
+	// TODO: respect the width from css
 	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
 
 	parsed, err := ParseHTMLNodes(htmlReader)
 	if err != nil || parsed == nil {
 		return parsed, nil, err
 	}
+
+	// according to box model , first determine padding, border and last apply margin to the zone
+	// https://www.w3.org/TR/CSS2/box.html#box-dimensions
 
 	// empty html is blank white
 	var bkgColor color.Color = color.RGBA{255, 255, 255, 255}
@@ -49,12 +54,15 @@ func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode,
 			sp.Set(x, y, bkgColor)
 		}
 	}
+
+	// remove space that is used for margin
 	fullBodyMargin := parseMargin(parsed.Style)
 	bodyMargin := fullBodyMargin.Min
 	zone := floatgeom.Rect2{
 		Min: bodyMargin,
 		Max: floatgeom.Point2{float64(dims.X()), float64(dims.Y())}.Sub(bodyMargin),
 	}
+
 	drawNode(parsed.FirstChild, sp, zone)
 
 	return parsed, sp, err
@@ -163,6 +171,80 @@ func parseLength(l string) (float64, bool) {
 	}
 	// todo: others
 	return 0, false
+}
+
+// parseBorderAttributes and determine the drawing considerations for a given border line
+// returns the computed size, color, style and optionally an error in the compute
+func parseBorderAttributes(direction string, styles map[string]string) (int, color.Color, string, error) {
+
+	// cheat for now on the border as have not been able to find an example of
+	// border + a sub thing being specified at the same time
+	// so parse the values in border and slap them into appropriate sub elements for now
+	//	[ <border-width> || <border-style> || <'border-top-color'> ]
+	borderPieces := strings.Split(styles["border"], " ")
+	if len(borderPieces) > 0 && borderPieces[0] != "" {
+		styles["border-width"] = borderPieces[0]
+	}
+	if len(borderPieces) > 1 && borderPieces[1] != "" {
+		styles["border-style"] = borderPieces[1]
+	}
+	if len(borderPieces) > 2 && borderPieces[2] != "" {
+		styles["border-color"] = borderPieces[2]
+	}
+	borderPieces = strings.Split(styles[fmt.Sprintf("border-%s", direction)], " ")
+	if len(borderPieces) > 0 && borderPieces[0] != "" {
+		styles[fmt.Sprintf("border-%s-width", direction)] = borderPieces[0]
+	}
+	if len(borderPieces) > 1 && borderPieces[1] != "" {
+		styles[fmt.Sprintf("border-%s-style", direction)] = borderPieces[1]
+	}
+	if len(borderPieces) > 2 && borderPieces[2] != "" {
+		styles[fmt.Sprintf("border-%s-color", direction)] = borderPieces[2]
+	}
+
+	// first see if we are taking from border or a sub value here
+	width := styles[fmt.Sprintf("border-%s-width", direction)]
+	if width == "" {
+		width = styles["border-width"]
+	}
+	colorString := styles[fmt.Sprintf("border-%s-color", direction)]
+	if colorString == "" {
+		colorString = styles["border-color"]
+	}
+	bStyle := styles[fmt.Sprintf("border-%s-style", direction)]
+	if bStyle == "" {
+		bStyle = styles["border-style"]
+	}
+	// Since the initial value of the border styles is 'none', no borders will be visible unless the border style is set.
+	if bStyle == "" {
+		bStyle = "none"
+	}
+
+	//  The interpretation of the first three values depends on the user agent
+	size := 0
+	switch width {
+	case "thin":
+		size = 1
+	case "medium":
+		size = 2
+	case "thick":
+		size = 3
+	case "": // valid just not set so make size 0
+		size = 0
+	default:
+		// attempt to parse as a non-negative int
+		length, err := strconv.Atoi(width)
+		if err != nil {
+			return size, color.RGBA{0, 0, 0, 255}, bStyle, fmt.Errorf("invalid border length requested: %s", width)
+		}
+		size = length
+	}
+
+	// border-color
+	parsedColor, _, _ := parseHTMLColor(colorString)
+
+	return size, parsedColor, bStyle, nil
+
 }
 
 func parseMargin(style map[string]string) floatgeom.Rect2 {
@@ -284,6 +366,11 @@ func parseNodeDims(node *ParsedNode, drawzone floatgeom.Rect2) floatgeom.Rect2 {
 	return floatgeom.NewRect2WH(0, 0, w, h)
 }
 
+func drawboxModel(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) {
+	drawBackground(node, sp, drawzone, noTallerThan, noWiderThan)
+	drawBorder(node, sp, drawzone, noTallerThan, noWiderThan)
+}
+
 func drawBackground(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
 	bkg, ok := node.Style["background"]
 	if !ok {
@@ -310,6 +397,92 @@ func drawBackground(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect
 	return floatgeom.Point2{}
 }
 
+func drawBorder(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) {
+
+	bkgDim := parseNodeDims(node, drawzone)
+	if bkgDim.H() > noTallerThan {
+		bkgDim.Max[1] = bkgDim.Min[1] + noTallerThan
+	}
+	if bkgDim.W() > noWiderThan {
+		bkgDim.Max[0] = bkgDim.Min[0] + noWiderThan
+	}
+
+	top := int(bkgDim.Min.Y() + drawzone.Min.Y())
+	bottom := int(bkgDim.Max.Y() + drawzone.Min.Y())
+	left := int(bkgDim.Min.X() + drawzone.Min.X())
+	right := int(bkgDim.Max.X() + drawzone.Min.X())
+	// remove space for border and the populate the border element
+	// TODO: actually do this per direction
+	width, brdColor, style, err := parseBorderAttributes("top", node.Style)
+	if err != nil {
+		width = 0
+		// TODO: err handling?
+		fmt.Println("encountered a bad border", err)
+	}
+	if width > 0 {
+		switch style {
+		case "hidden", "none":
+		case "solid":
+			for x := int(drawzone.Min.X()); x < int(drawzone.Max.X()); x++ {
+				for y := int(drawzone.Min.Y()); y < int(drawzone.Min.Y())+width; y++ {
+					sp.Set(x, y, brdColor)
+				}
+			}
+		}
+	}
+	width, brdColor, style, err = parseBorderAttributes("bottom", node.Style)
+	if err != nil {
+		width = 0
+		fmt.Println("encountered a bad bottom border", err)
+	}
+	if width > 0 {
+		switch style {
+		case "hidden", "none":
+		case "solid":
+			for x := int(drawzone.Min.X()); x < int(drawzone.Max.X()); x++ {
+				for y := bottom; y > bottom-width; y-- {
+					sp.Set(x, y, brdColor)
+				}
+			}
+		}
+	}
+	width, brdColor, style, err = parseBorderAttributes("left", node.Style)
+	if err != nil {
+		width = 0
+		fmt.Println("encountered a bad bottom border", err)
+	}
+	if width > 0 {
+		switch style {
+		case "hidden", "none":
+		case "solid":
+			for x := left; x < left+width; x++ {
+				for y := top; y < bottom; y++ {
+					sp.Set(x, y, brdColor)
+				}
+			}
+
+		}
+	}
+	width, brdColor, style, err = parseBorderAttributes("right", node.Style)
+	if err != nil {
+		width = 0
+		fmt.Println("encountered a bad bottom border", err)
+	}
+	if width > 0 {
+		switch style {
+		case "hidden", "none":
+		case "solid":
+			for x := right - width; x <= right; x++ {
+				for y := top; y < bottom; y++ {
+					sp.Set(x, y, brdColor)
+				}
+			}
+
+		}
+	}
+
+}
+
 func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (heightConsumed float64) {
 	if node == nil {
 		return 0
@@ -321,6 +494,7 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		drawzone.Min[0] = margin.Min[0]
 	}
 	childDrawzoneModifier := floatgeom.Point2{}
+
 	// TODO: inline vs block / content categories
 	switch node.Tag {
 	case "div":
@@ -332,6 +506,7 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		// TODO: spacing around p and div is incorrect
 		// TODO: div and p are really similar and yet subtly different, why?
 		drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
+
 		// TODO: this is not right; children are drawn below already;
 		// how do we know whether a node is text content?
 		if node.FirstChild != nil && node.FirstChild.FirstChild == nil {
@@ -384,7 +559,7 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 			textVBuffer = textSize / 5 // todo: where is this from?
 			// todo: is this the background of p or the background of the text content child?
 			if i == 0 {
-				drawBackground(node, sp, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
+				drawboxModel(node, sp, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
 			}
 			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
 			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
