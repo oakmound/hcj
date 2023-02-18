@@ -225,6 +225,9 @@ func ParseSelector(s string) (Selector, error) {
 			pc := PseudoClass{
 				Type: stringToPseudoClassType(string(id.Raw)),
 			}
+			if pc.Type == PseudoClassTypeUnknown {
+				return sel, fmt.Errorf("unknown pseudo-class %q", string(id.Raw))
+			}
 			switch string(id.Raw) {
 			case "lang", "not", "nth-child", "nth-last-child", "nth-last-of-type", "nth-of-type":
 				_, err := tkz.ExpectNext(SelectorTokenTypeSubSelectorStart)
