@@ -63,7 +63,10 @@ func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode,
 		Max: floatgeom.Point2{float64(dims.X()), float64(dims.Y())}.Sub(bodyMargin),
 	}
 
-	drawNode(parsed.FirstChild, sp, zone)
+	_, _, toDraw := drawNode(parsed.FirstChild, sp, zone)
+	for _, drawer := range toDraw {
+		drawer(sp)
+	}
 
 	return parsed, sp, err
 }
@@ -366,12 +369,21 @@ func parseNodeDims(node *ParsedNode, drawzone floatgeom.Rect2) floatgeom.Rect2 {
 	return floatgeom.NewRect2WH(0, 0, w, h)
 }
 
-func drawboxModel(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) {
-	drawBackground(node, sp, drawzone, noTallerThan, noWiderThan)
+func drawboxModel(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) []drawFunc {
+	drawers := []drawFunc{}
+	_, draw1 := drawBackground(node, sp, drawzone, noTallerThan, noWiderThan)
+	// draw2 :=
 	drawBorder(node, sp, drawzone, noTallerThan, noWiderThan)
+	if draw1 != nil {
+		drawers = []drawFunc{draw1}
+	}
+	// if draw2 != nil {
+	// 	drawers = append(drawers, draw2)
+	// }
+	return drawers
 }
 
-func drawBackground(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
+func drawBackground(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) (floatgeom.Point2, drawFunc) {
 	bkg, ok := node.Style["background"]
 	if !ok {
 		bkg, ok = node.Style["background-color"]
@@ -391,10 +403,10 @@ func drawBackground(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect
 		parsedColor = applyOpacity(parsedColor, node.Style["opacity"])
 		bx := render.NewColorBox(int(bkgDim.W()), int(bkgDim.H()), parsedColor)
 		bds := offsetBoundsByDrawzone(bx, drawzone)
-		draw.Draw(sp.GetRGBA(), bds, bx.GetRGBA(), image.Point{}, draw.Over)
-		return floatgeom.Point2{float64(bds.Dx()), float64(bds.Dy())}
+
+		return floatgeom.Point2{float64(bds.Dx()), float64(bds.Dy())}, toDrawFunc(bds, bx.GetRGBA(), image.Point{})
 	}
-	return floatgeom.Point2{}
+	return floatgeom.Point2{}, nil
 }
 
 func drawBorder(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) {
@@ -483,9 +495,18 @@ func drawBorder(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2, n
 
 }
 
-func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (heightConsumed float64) {
+type drawFunc func(*render.Sprite)
+
+func toDrawFunc(bds image.Rectangle, whatToDraw image.Image, whereToDraw image.Point) drawFunc {
+	return func(canvas *render.Sprite) {
+		draw.Draw(canvas.GetRGBA(), bds, whatToDraw, whereToDraw, draw.Over)
+	}
+}
+
+func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (widthConsumed, heightConsumed float64, toDraw []drawFunc) {
+	toDraw = []drawFunc{}
 	if node == nil {
-		return 0
+		return
 	}
 	startHeight := drawzone.Min.Y()
 	margin := parseMargin(node.Style)
@@ -494,6 +515,10 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		drawzone.Min[0] = margin.Min[0]
 	}
 	childDrawzoneModifier := floatgeom.Point2{}
+
+	// Initialize postchild and some variables it may modify
+	postChild := func() {}
+	var longestWidth, childrenHeight float64
 
 	// TODO: inline vs block / content categories
 	switch node.Tag {
@@ -524,17 +549,22 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		fallthrough
 	case "address":
 		if node.FirstChild != nil {
-			text := node.FirstChild.Raw.Data
-			// This is not correct?
-			if !unicode.IsSpace(rune(text[len(text)-1])) {
-				text += " "
+			switch node.FirstChild.Raw.Type {
+			// case html.TextNode:
+			default:
+				text := node.FirstChild.Raw.Data
+				// This is not correct?
+				if !unicode.IsSpace(rune(text[len(text)-1])) {
+					text += " "
+				}
+				rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+				textVBuffer := textSize / 5 // todo: where is this from?
+				// todo: is this the background of p or the background of the text content child?
+				drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
+				toDraw = append(toDraw, toDrawFunc(bds, rText.GetRGBA(), image.Point{}))
+				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
+				// default:
 			}
-			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-			textVBuffer := textSize / 5 // todo: where is this from?
-			// todo: is this the background of p or the background of the text content child?
-			drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
-			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
-			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
 		}
 	case "p":
 		nextChild := node.FirstChild
@@ -559,9 +589,10 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 			textVBuffer = textSize / 5 // todo: where is this from?
 			// todo: is this the background of p or the background of the text content child?
 			if i == 0 {
-				drawboxModel(node, sp, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
+				newDraws := drawboxModel(node, sp, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
+				toDraw = append(toDraw, newDraws...)
 			}
-			draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
+			toDraw = append(toDraw, toDrawFunc(bds, rText.GetRGBA(), image.Point{}))
 			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 		}
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
@@ -582,7 +613,8 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 				}
 				r.Close()
 				bds := offsetBoundsByDrawzone(img, drawzone)
-				draw.Draw(sp.GetRGBA(), bds, img, image.Point{}, draw.Over)
+				toDraw = append(toDraw, toDrawFunc(bds, img, image.Point{}))
+
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			}
 		}
@@ -596,31 +628,37 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 		switch node.Raw.Parent.Data {
 		case "ul":
 			if node.FirstChild != nil {
-				text := node.FirstChild.Raw.Data
-				textSize := 16.0
-				if size, ok := parseLength(node.Style["font-size"]); ok {
-					textSize = size
+
+				postChild = func() {
+					// TODO: how do we pull non pure text
+					text := node.FirstChild.Raw.Data
+
+					textSize := 16.0
+					if size, ok := parseLength(node.Style["font-size"]); ok {
+						textSize = size
+					}
+
+					textVBuffer := textSize / 5 // todo: where is this from?
+
+					// draw bullet
+					bulletRadius := textSize / 2
+					bulletOffset := textSize / 3
+					render.DrawCircle(sp.GetRGBA(), getTextColor(node.FirstChild), bulletRadius/2, 1, drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
+
+					// TODO: this number
+					bulletGap := bulletRadius * 2
+					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
+
+					// todo: is this the background of ul or the background of the text content child?
+					// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
+					drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
+
+					// draw text
+					rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+					toDraw = append(toDraw, toDrawFunc(bds, rText.GetRGBA(), image.Point{}))
+					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
+					longestWidth = float64(bds.Max.X - bds.Min.X)
 				}
-
-				textVBuffer := textSize / 5 // todo: where is this from?
-
-				// draw bullet
-				bulletRadius := textSize / 2
-				bulletOffset := textSize / 3
-				render.DrawCircle(sp.GetRGBA(), getTextColor(node.FirstChild), bulletRadius/2, 1, drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
-
-				// TODO: this number
-				bulletGap := bulletRadius * 2
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
-
-				// todo: is this the background of ul or the background of the text content child?
-				// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
-				drawBackground(node, sp, drawzone, textSize+textVBuffer, math.MaxFloat64)
-
-				// draw text
-				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-				draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
 			}
 		}
 	case "table":
@@ -677,13 +715,13 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 						w = parsed
 					}
 				}
-				bkgDiff := drawBackground(col, sp, drawzone, textSize+textVBuffer, w)
-
+				bkgDiff, newDraw := drawBackground(col, sp, drawzone, textSize+textVBuffer, w)
+				toDraw = append(toDraw, newDraw)
 				bds.Min.X = int(drawzone.Min.X())
 				bds.Min.Y = int(drawzone.Min.Y())
 				bds.Max.X += int(drawzone.Min.X())
 				bds.Max.Y += int(drawzone.Min.Y())
-				draw.Draw(sp.GetRGBA(), bds, rText.GetRGBA(), image.Point{}, draw.Over)
+				toDraw = append(toDraw, toDrawFunc(bds, rText.GetRGBA(), image.Point{}))
 				rowWidth += bkgDiff.X()
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bkgDiff.X(), 0})
 				col = col.NextSibling
@@ -698,14 +736,29 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 				nextRow = nextRow.NextSibling
 			}
 		}
+	default:
+		// if node.Raw.Type == html.TextNode {
+
+		// }
 	}
 	drawzone.Min = drawzone.Min.Add(childDrawzoneModifier)
-	childrenHeight := drawNode(node.FirstChild, sp, drawzone)
+
+	dr := floatgeom.Rect2{
+		Min: floatgeom.Point2{drawzone.Min.X(), drawzone.Min.Y()},
+		Max: floatgeom.Point2{drawzone.Max.X(), drawzone.Max.Y()},
+	}
+	var newDraw, siblingDraw []drawFunc
+	_, childrenHeight, newDraw = drawNode(node.FirstChild, sp, dr)
+
+	postChild()
+	toDraw = append(toDraw, newDraw...)
 	drawzone.Min = drawzone.Min.Sub(childDrawzoneModifier)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(childrenHeight)})
-	siblingsHeight := drawNode(node.NextSibling, sp, drawzone)
+
+	_, siblingsHeight, siblingDraw := drawNode(node.NextSibling, sp, drawzone)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(siblingsHeight)})
-	return drawzone.Min.Y() - startHeight
+	toDraw = append(toDraw, siblingDraw...)
+	return longestWidth, drawzone.Min.Y() - startHeight, toDraw
 }
 
 func loadSrc(src string) (io.ReadCloser, error) {
