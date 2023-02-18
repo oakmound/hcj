@@ -193,6 +193,21 @@ func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
 	for _, pc := range sel.PseudoClasses {
 		// TODO: implement more pseudo class support
 		switch pc.Type {
+		case PseudoClassTypeEmpty:
+			empty := true
+			WalkChildren(pn.Raw, func(n *html.Node) bool {
+				if n.Data != "" {
+					empty = false
+					return false
+				}
+				return true
+			})
+			if empty {
+				// todo: how much?
+				priority += 1
+			} else {
+				return -1000
+			}
 		case PseudoClassTypeNot:
 			pcPriority := pn.SelectorPriority(pc.SubSelector)
 			// TODO: this is not sufficient
@@ -205,6 +220,31 @@ func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
 		}
 	}
 	return priority
+}
+
+func WalkChildren(root *html.Node, fn func(n *html.Node) bool) (cont bool) {
+	if root.FirstChild != nil {
+		next := root.FirstChild
+		siblings := []*html.Node{next}
+		for {
+			next := next.NextSibling
+			if next == nil {
+				break
+			}
+			siblings = append(siblings, next)
+		}
+		for _, s := range siblings {
+			cont = fn(s)
+			if !cont {
+				return
+			}
+			cont = WalkChildren(s, fn)
+			if !cont {
+				return
+			}
+		}
+	}
+	return true
 }
 
 func (pn *ParsedNode) CalculateStyle(css CSS) {
