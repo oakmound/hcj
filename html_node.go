@@ -227,7 +227,7 @@ func WalkChildren(root *html.Node, fn func(n *html.Node) bool) (cont bool) {
 		next := root.FirstChild
 		siblings := []*html.Node{next}
 		for {
-			next := next.NextSibling
+			next = next.NextSibling
 			if next == nil {
 				break
 			}

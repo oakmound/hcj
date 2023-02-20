@@ -763,7 +763,7 @@ func formatTextAsSprite(node *ParsedNode, drawzone floatgeom.Rect2, textSizeDefa
 		fg.Size = textSize
 		if node.Style["font-style"] == "italic" {
 			fg.RawFile = luxisriTTF
-		} else if node.Style["font-stlye"] == "bold" {
+		} else if node.Style["font-style"] == "bold" {
 			fg.RawFile = luxisbTTF
 		}
 		return fg

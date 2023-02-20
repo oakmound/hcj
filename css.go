@@ -221,7 +221,7 @@ func ParseSelector(s string) (Selector, error) {
 					return sel, err
 				}
 			}
-			// some psuedo classes have sub selectors
+			// some pseudo classes have sub selectors
 			pc := PseudoClass{
 				Type: stringToPseudoClassType(string(id.Raw)),
 			}
