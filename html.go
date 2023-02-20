@@ -520,9 +520,7 @@ func drawNode(node *ParsedNode, sp *render.Sprite, drawzone floatgeom.Rect2) (he
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
 			}
 		}
-	case "span":
-		fallthrough
-	case "address":
+	case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6":
 		if node.FirstChild != nil {
 			text := node.FirstChild.Raw.Data
 			// This is not correct?

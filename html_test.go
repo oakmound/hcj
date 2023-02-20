@@ -81,7 +81,7 @@ func Test_RenderHTML_Golden(t *testing.T) {
 			pngFileName := strings.ReplaceAll(i, ".html", ".png")
 			pngFileName = strings.ReplaceAll(pngFileName, ".htm", ".png")
 			rgba2, ok := outputs[pngFileName]
-			if !ok {
+			if !ok || os.Getenv("OVERRIDE_TESTDATA") != "" {
 				// create the baseline
 				fmt.Println("creating baseline for", pngFileName)
 				outfile, err := os.Create(filepath.Join("testdata", "htmlout", pngFileName))
