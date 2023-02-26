@@ -5,8 +5,8 @@ go 1.19
 require (
 	github.com/google/go-cmp v0.5.9
 	github.com/oakmound/oak/v4 v4.1.0
-	golang.org/x/image v0.3.0
-	golang.org/x/net v0.5.0
+	golang.org/x/image v0.5.0
+	golang.org/x/net v0.7.0
 )
 
 require (
