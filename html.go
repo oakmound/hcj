@@ -192,31 +192,6 @@ const maxSize = 3
 // returns the computed size, color, style and optionally an error in the compute
 func parseBorderAttributes(direction string, styles map[string]string) (int, color.Color, string, error) {
 
-	// cheat for now on the border as have not been able to find an example of
-	// border + a sub thing being specified at the same time
-	// so parse the values in border and slap them into appropriate sub elements for now
-	//	[ <border-width> || <border-style> || <'border-top-color'> ]
-	// borderPieces := strings.Split(styles["border"], " ")
-	// if len(borderPieces) > 0 && borderPieces[0] != "" {
-	// 	styles["border-width"] = borderPieces[0]
-	// }
-	// if len(borderPieces) > 1 && borderPieces[1] != "" {
-	// 	styles["border-style"] = borderPieces[1]
-	// }
-	// if len(borderPieces) > 2 && borderPieces[2] != "" {
-	// 	styles["border-color"] = borderPieces[2]
-	// }
-	// borderPieces := strings.Split(styles[fmt.Sprintf("border-%s", direction)], " ")
-	// if len(borderPieces) > 0 && borderPieces[0] != "" {
-	// 	styles[fmt.Sprintf("border-%s-width", direction)] = borderPieces[0]
-	// }
-	// if len(borderPieces) > 1 && borderPieces[1] != "" {
-	// 	styles[fmt.Sprintf("border-%s-style", direction)] = borderPieces[1]
-	// }
-	// if len(borderPieces) > 2 && borderPieces[2] != "" {
-	// 	styles[fmt.Sprintf("border-%s-color", direction)] = borderPieces[2]
-	// }
-
 	// first see if we are taking from border or a sub value here
 	width := styles[fmt.Sprintf("border-%s-width", direction)]
 
