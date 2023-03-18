@@ -445,10 +445,10 @@ func ParseAttributeSelector(selector string) (AttributeSelector, error) {
 	}, nil
 }
 
-type procesor func(map[string]string, string, string)
+type processor func(map[string]string, string, string)
 
 // map of composite attributes and what they should equate to
-var compositeAttributeMapping = map[string]procesor{
+var compositeAttributeMapping = map[string]processor{
 	"border-top": decomposeBorder, "border-right": decomposeBorder, "border-bottom": decomposeBorder, "border-left": decomposeBorder, "border": decomposeBorder,
 	"border-color": allDirLikeBorder, "border-style": allDirLikeBorder, "border-size": allDirLikeBorder,
 	"margin": allDirLikeBorder, "padding": allDirLikeBorder,
