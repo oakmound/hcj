@@ -145,18 +145,26 @@ func getMapAttribute(node *html.Node, key string) map[string]string {
 }
 
 func parseSemiSeparatedMap(data string) map[string]string {
+	_, content := parseSemiSeparatedMapWithOrder(data)
+	return content
+}
+
+func parseSemiSeparatedMapWithOrder(data string) ([]string, map[string]string) {
 	// todo: how often do we need to strip spaces from these values
 	vals := strings.Split(data, ";")
 	out := make(map[string]string, len(vals))
+	outOrder := make([]string, 0, len(vals))
 	for _, v := range vals {
 		splitVal := strings.Split(v, ":")
 		if len(splitVal) != 2 {
 			// ignore bad formatted thing
 			continue
 		}
-		out[strings.TrimSpace(splitVal[0])] = strings.TrimSpace(splitVal[1])
+		k := strings.TrimSpace(splitVal[0])
+		out[k] = strings.TrimSpace(splitVal[1])
+		outOrder = append(outOrder, k)
 	}
-	return out
+	return outOrder, out
 }
 
 func parseLength(l string) (float64, bool) {
@@ -188,40 +196,34 @@ func parseBorderAttributes(direction string, styles map[string]string) (int, col
 	// border + a sub thing being specified at the same time
 	// so parse the values in border and slap them into appropriate sub elements for now
 	//	[ <border-width> || <border-style> || <'border-top-color'> ]
-	borderPieces := strings.Split(styles["border"], " ")
-	if len(borderPieces) > 0 && borderPieces[0] != "" {
-		styles["border-width"] = borderPieces[0]
-	}
-	if len(borderPieces) > 1 && borderPieces[1] != "" {
-		styles["border-style"] = borderPieces[1]
-	}
-	if len(borderPieces) > 2 && borderPieces[2] != "" {
-		styles["border-color"] = borderPieces[2]
-	}
-	borderPieces = strings.Split(styles[fmt.Sprintf("border-%s", direction)], " ")
-	if len(borderPieces) > 0 && borderPieces[0] != "" {
-		styles[fmt.Sprintf("border-%s-width", direction)] = borderPieces[0]
-	}
-	if len(borderPieces) > 1 && borderPieces[1] != "" {
-		styles[fmt.Sprintf("border-%s-style", direction)] = borderPieces[1]
-	}
-	if len(borderPieces) > 2 && borderPieces[2] != "" {
-		styles[fmt.Sprintf("border-%s-color", direction)] = borderPieces[2]
-	}
+	// borderPieces := strings.Split(styles["border"], " ")
+	// if len(borderPieces) > 0 && borderPieces[0] != "" {
+	// 	styles["border-width"] = borderPieces[0]
+	// }
+	// if len(borderPieces) > 1 && borderPieces[1] != "" {
+	// 	styles["border-style"] = borderPieces[1]
+	// }
+	// if len(borderPieces) > 2 && borderPieces[2] != "" {
+	// 	styles["border-color"] = borderPieces[2]
+	// }
+	// borderPieces := strings.Split(styles[fmt.Sprintf("border-%s", direction)], " ")
+	// if len(borderPieces) > 0 && borderPieces[0] != "" {
+	// 	styles[fmt.Sprintf("border-%s-width", direction)] = borderPieces[0]
+	// }
+	// if len(borderPieces) > 1 && borderPieces[1] != "" {
+	// 	styles[fmt.Sprintf("border-%s-style", direction)] = borderPieces[1]
+	// }
+	// if len(borderPieces) > 2 && borderPieces[2] != "" {
+	// 	styles[fmt.Sprintf("border-%s-color", direction)] = borderPieces[2]
+	// }
 
 	// first see if we are taking from border or a sub value here
 	width := styles[fmt.Sprintf("border-%s-width", direction)]
-	if width == "" {
-		width = styles["border-width"]
-	}
+
 	colorString := styles[fmt.Sprintf("border-%s-color", direction)]
-	if colorString == "" {
-		colorString = styles["border-color"]
-	}
+
 	bStyle := styles[fmt.Sprintf("border-%s-style", direction)]
-	if bStyle == "" {
-		bStyle = styles["border-style"]
-	}
+
 	// Since the initial value of the border styles is 'none', no borders will be visible unless the border style is set.
 	if bStyle == "" {
 		bStyle = "none"
@@ -249,8 +251,10 @@ func parseBorderAttributes(direction string, styles map[string]string) (int, col
 	}
 
 	// border-color
-	parsedColor, _, _ := parseHTMLColor(colorString)
-
+	parsedColor, _, inheritable := parseHTMLColor(colorString)
+	if inheritable {
+		parsedColor, _, _ = parseHTMLColor(styles["color"])
+	}
 	return size, parsedColor, bStyle, nil
 
 }
