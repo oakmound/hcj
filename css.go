@@ -274,6 +274,7 @@ func ParseSelector(s string) (Selector, error) {
 
 func ParseCSS(s string) CSS {
 	// ignore invalid selectors
+
 	c := CSS{
 		Selectors: make(map[string]map[string]string),
 	}
@@ -295,7 +296,7 @@ func ParseCSS(s string) CSS {
 		}
 		def := selectorSplit[1][:endDef]
 		def = strings.Trim(def, "{} \n\t\r")
-		parsedDef := parseSemiSeparatedMap(def)
+		parsedDefOrder, parsedDef := parseSemiSeparatedMapWithOrder(def)
 		// validation
 		for k, v := range parsedDef {
 			if k == "color" || k == "background-color" || k == "background" {
@@ -319,8 +320,24 @@ func ParseCSS(s string) CSS {
 			if c.Selectors[selectorStr] == nil {
 				c.Selectors[selectorStr] = make(map[string]string)
 			}
-			for k, v := range parsedDef {
+			for _, k := range parsedDefOrder {
+				v := parsedDef[k]
+
+				// validate directive
+				// per https://www.w3.org/TR/css-color-3/#rgb-def which references https://www.w3.org/TR/2011/REC-CSS2-20110607/
+				// which actually no longer contains the info as its been moved to it's errata https://www.w3.org/Style/css2-updates/REC-CSS2-20110607-errata.html
+				// we have to validate whether the rule is valid prior to applying it. See t040204-hsl-parsing-f.htm
+
+				if !isValidKnownCss(k, v) {
+					continue
+				}
+
 				c.Selectors[selectorStr][k] = v
+
+				// TODO: order dependant actions need to occur here
+				if proc, ok := compositeAttributeMapping[k]; ok {
+					proc(c.Selectors[selectorStr], k, v)
+				}
 			}
 		}
 	}
@@ -426,4 +443,125 @@ func ParseAttributeSelector(selector string) (AttributeSelector, error) {
 	return &attributeSelectorFn{
 		matchFn: match,
 	}, nil
+}
+
+type processor func(map[string]string, string, string)
+
+// map of composite attributes and what they should equate to
+var compositeAttributeMapping = map[string]processor{
+	"border-top": decomposeBorder, "border-right": decomposeBorder, "border-bottom": decomposeBorder, "border-left": decomposeBorder, "border": decomposeBorder,
+	"border-color": allDirLikeBorder, "border-style": allDirLikeBorder, "border-size": allDirLikeBorder,
+	"margin": allDirLikeBorder, "padding": allDirLikeBorder,
+}
+
+func decomposeBorder(styles map[string]string, key, val string) {
+
+	// if key == "border" --> break into alldir like border
+	if key == "border" {
+		decomposeBorder(styles, fmt.Sprintf("%s-top", key), val)
+		decomposeBorder(styles, fmt.Sprintf("%s-bottom", key), val)
+		decomposeBorder(styles, fmt.Sprintf("%s-left", key), val)
+		decomposeBorder(styles, fmt.Sprintf("%s-right", key), val)
+		return
+	}
+
+	// here we inspect the val to determine what sub elements we are setting
+	valueParts := strings.Fields(val)
+	for _, valPart := range valueParts {
+		if isABorderWidth(valPart) {
+			setStyleIfIsValid(styles, fmt.Sprintf("%s-width", key), valPart)
+			continue
+		}
+		if _, ok := bStyles[valPart]; ok {
+			setStyleIfIsValid(styles, fmt.Sprintf("%s-style", key), valPart)
+			continue
+		}
+
+		setStyleIfIsValid(styles, fmt.Sprintf("%s-color", key), valPart)
+	}
+
+}
+
+// allDirLikeBorder sets all directions like how margina and border do it. Namely following the below lines directive
+// If there is only one component value, it applies to all sides. If there are two values, the top and bottom margins are set to the first value and the right and left margins are set to the second. If there are three values, the top is set to the first value, the left and right are set to the second, and the bottom is set to the third. If there are four values, they apply to the top, right, bottom, and left, respectively.
+func allDirLikeBorder(styles map[string]string, key, val string) {
+	if !isValidKnownCss(key, val) {
+		return
+	}
+	// if multi part such as border-style then it becomes border-<direction>-style
+	keyParts := strings.Split(key, "-")
+	postDirectionPiece := ""
+	if len(keyParts) != 1 {
+		postDirectionPiece = fmt.Sprintf("-%s", strings.Join(keyParts[1:], "-"))
+	}
+	top := fmt.Sprintf("%s-top%s", keyParts[0], postDirectionPiece)
+	bottom := fmt.Sprintf("%s-bottom%s", keyParts[0], postDirectionPiece)
+	left := fmt.Sprintf("%s-left%s", keyParts[0], postDirectionPiece)
+	right := fmt.Sprintf("%s-right%s", keyParts[0], postDirectionPiece)
+
+	valueParts := strings.Fields(val)
+
+	switch len(valueParts) {
+	case 1:
+		styles[top] = valueParts[0]
+		styles[bottom] = valueParts[0]
+		styles[left] = valueParts[0]
+		styles[right] = valueParts[0]
+	case 2:
+		styles[top] = valueParts[0]
+		styles[bottom] = valueParts[0]
+		styles[left] = valueParts[1]
+		styles[right] = valueParts[1]
+	case 3:
+		styles[top] = valueParts[0]
+		styles[bottom] = valueParts[2]
+		styles[left] = valueParts[1]
+		styles[right] = valueParts[1]
+	case 4:
+		styles[top] = valueParts[0]
+		styles[right] = valueParts[1]
+		styles[bottom] = valueParts[2]
+		styles[left] = valueParts[3]
+
+	default:
+		// TODO: Don't just print. decide on a nicer way to bubble. Also should this count as a parse error?
+		fmt.Println("detected invalid len for ", key, "with value", val, "and len", len(valueParts))
+	}
+}
+
+var bStyles = map[string]struct{}{"none": struct{}{},
+	"hidden": struct{}{}, "dotted": struct{}{},
+	"dashed": struct{}{}, "solid": struct{}{},
+	"double": struct{}{}, "groove": struct{}{},
+	"ridge": struct{}{}, "inset": struct{}{},
+	"outset": struct{}{},
+}
+var bWidths = map[string]struct{}{"thin": struct{}{}, "medium": struct{}{}, "thick": struct{}{}}
+
+func isABorderWidth(part string) bool {
+	_, err := strconv.Atoi(part)
+	if err == nil {
+		return true
+	}
+	_, ok := bWidths[part]
+	return ok
+}
+
+func setStyleIfIsValid(styles map[string]string, key, val string) {
+	if !isValidKnownCss(key, val) {
+		return
+	}
+	styles[key] = val
+}
+
+// isValidKnownCss probably shouldnt exist as we are now duplicating work over in other places where we do final parsing
+// adding a stopgap until we have a better understanding of the scope of things that need validation
+func isValidKnownCss(key, val string) bool {
+	ok := true // pretend that things are ok unless we know otherwise. Technically against the spirit of css
+	switch key {
+	case "color", "background-color", "border-color":
+		_, ok, _ = parseHTMLColor(val)
+	}
+
+	return ok
 }
