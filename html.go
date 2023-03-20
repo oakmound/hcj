@@ -25,19 +25,7 @@ func RenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*render.Sprite, erro
 	return sp, err
 }
 
-// ParseAndRenderHTML outputting the internal Node representation along with a sprite that has
-// the given dimensions.
-func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode, *render.Sprite, error) {
-
-	toDrawStack := render.NewDrawStack(render.NewDynamicHeap())
-	// TODO: respect the width from css
-	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
-
-	parsed, err := ParseHTMLNodes(htmlReader)
-	if err != nil || parsed == nil {
-		return parsed, nil, err
-	}
-
+func (p *ParsedNode) Draw(buff draw.Image, xOff, yOff float64) {
 	// according to box model , first determine padding, border and last apply margin to the zone
 	// https://www.w3.org/TR/CSS2/box.html#box-dimensions
 
@@ -45,36 +33,57 @@ func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode,
 	var bkgColor color.Color = color.RGBA{255, 255, 255, 255}
 
 	// TODO: what to do if both of these are set?
-	if col, ok := parsed.Style["background-color"]; ok {
+	if col, ok := p.Style["background-color"]; ok {
 		bkgColor, _, _ = parseHTMLColor(col)
-	} else if col, ok := parsed.Style["background"]; ok {
+	} else if col, ok := p.Style["background"]; ok {
 		bkgColor, _, _ = parseHTMLColor(col)
-	}
-	for x := 0; x < dims.X(); x++ {
-		for y := 0; y < dims.Y(); y++ {
-			sp.Set(x, y, bkgColor)
-		}
 	}
 
+	bds := buff.Bounds()
+
+	stack := render.NewDrawStack(
+		render.NewDynamicHeap(),
+		render.NewDynamicHeap(),
+	)
+	bkg := render.NewColorBoxR(bds.Dx(), bds.Dy(), bkgColor)
+	stack.Draw(bkg, 0, -1)
+
 	// remove space that is used for margin
-	fullBodyMargin := parseMargin(parsed.Style)
+	fullBodyMargin := parseMargin(p.Style)
 	bodyMargin := fullBodyMargin.Min
 	zone := floatgeom.Rect2{
 		Min: bodyMargin,
-		Max: floatgeom.Point2{float64(dims.X()), float64(dims.Y())}.Sub(bodyMargin),
+		Max: floatgeom.Point2{float64(bds.Dx()), float64(bds.Dy())}.Sub(bodyMargin),
 	}
 
-	addNode(parsed.FirstChild, sp, toDrawStack, zone)
+	trackingStack := &trackingDrawStack{
+		DrawStack: stack,
+	}
+
+	renderNode(p.FirstChild, trackingStack, zone)
 
 	// slap it all onto the background
-	toDrawStack.PreDraw()
-	toDrawStack.DrawToScreen(sp, &intgeom.Point2{0, 0}, dims.X(), dims.Y())
+	stack.PreDraw()
+	stack.DrawToScreen(buff, &intgeom.Point2{0, 0}, bds.Dx(), bds.Dy())
+}
+
+// ParseAndRenderHTML outputting the internal Node representation along with a sprite that has
+// the given dimensions.
+func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode, *render.Sprite, error) {
+
+	// TODO: respect the width from css
+	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
+
+	parsed, err := ParseHTML(htmlReader)
+	if err != nil || parsed == nil {
+		return parsed, nil, err
+	}
+	parsed.Draw(sp.GetRGBA(), 0, 0)
 
 	return parsed, sp, err
 }
 
-func ParseHTMLNodes(htmlReader io.Reader) (*ParsedNode, error) {
-
+func ParseHTML(htmlReader io.Reader) (*ParsedNode, error) {
 	rootNode, err := html.Parse(htmlReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse html: %w", err)
@@ -353,7 +362,7 @@ func parseNodeDims(node *ParsedNode, drawzone floatgeom.Rect2) floatgeom.Rect2 {
 	return floatgeom.NewRect2WH(0, 0, w, h)
 }
 
-func drawboxModel(node *ParsedNode, stack *render.DrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) float64 {
+func drawboxModel(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) float64 {
 	// TODO: Margin
 	lateOffset := drawBorder(node, stack, drawzone, noTallerThan, noWiderThan)
 
@@ -362,7 +371,26 @@ func drawboxModel(node *ParsedNode, stack *render.DrawStack, drawzone floatgeom.
 	return lateOffset[1]
 }
 
-func drawBackground(node *ParsedNode, stack *render.DrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
+// trackingDrawStack lets us consistently draw successive elements on top of each other,
+// or in particular orders e.g. borders on top of backgrounds. This is not a correct implementation
+// of html draw order, and is a stopgap.
+type trackingDrawStack struct {
+	nextMainLayer   int
+	nextBorderLayer int
+	*render.DrawStack
+}
+
+func (tds *trackingDrawStack) draw(r render.Renderable) {
+	tds.DrawStack.Draw(r, 0, tds.nextMainLayer)
+	tds.nextMainLayer++
+}
+
+func (tds *trackingDrawStack) drawBorder(r render.Renderable) {
+	tds.DrawStack.Draw(r, 1, tds.nextBorderLayer)
+	tds.nextBorderLayer++
+}
+
+func drawBackground(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
 	bkg, ok := node.Style["background"]
 	if !ok {
 		bkg, ok = node.Style["background-color"]
@@ -383,14 +411,13 @@ func drawBackground(node *ParsedNode, stack *render.DrawStack, drawzone floatgeo
 		bx := render.NewColorBox(int(bkgDim.W()), int(bkgDim.H()), parsedColor)
 		bds := offsetBoundsByDrawzone(bx, drawzone)
 		bx.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-		stack.Draw(bx, 0, 1, 0)
-		// draw.Draw(sp.GetRGBA(), bds, bx.GetRGBA(), image.Point{}, draw.Over)
+		stack.draw(bx)
 		return floatgeom.Point2{float64(bds.Dx()), float64(bds.Dy())}
 	}
 	return floatgeom.Point2{}
 }
 
-func drawBorder(node *ParsedNode, stack *render.DrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
+func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
 
 	bkgDim := parseNodeDims(node, drawzone)
 	if bkgDim.H() > noTallerThan {
@@ -477,14 +504,14 @@ func drawBorder(node *ParsedNode, stack *render.DrawStack, drawzone floatgeom.Re
 
 	}
 	box.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-	stack.Draw(box, 2)
+	stack.drawBorder(box)
 
 	// offset drawzone by the portions that matter for now
 	drawzone.Min.Add(minOffset)
 	return offset
 }
 
-func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawzone floatgeom.Rect2) (heightConsumed float64) {
+func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2) (heightConsumed float64) {
 	if node == nil {
 		return 0
 	}
@@ -516,7 +543,7 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
 
 				setIntPos(rText, bds)
-				stack.Draw(rText, 1)
+				stack.draw(rText)
 
 				// Not sure if this is needed but definitely isnt if there is no text. see hcj02
 
@@ -538,7 +565,7 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 			drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
 
 			setIntPos(rText, bds)
-			stack.Draw(rText, 1)
+			stack.draw(rText)
 			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
 		}
 	case "p":
@@ -568,7 +595,7 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 				borderYOff = drawboxModel(node, stack, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
 			}
 			setIntPos(rText, bds)
-			stack.Draw(rText, 1)
+			stack.draw(rText)
 			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 		}
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
@@ -590,8 +617,21 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 				}
 				r.Close()
 				bds := offsetBoundsByDrawzone(img, drawzone)
+				var rgba *image.RGBA
+				switch v := img.(type) {
+				case *image.RGBA:
+					rgba = v
+				default:
+					rgba = image.NewRGBA(img.Bounds())
+					for x := 0; x < rgba.Rect.Dx(); x++ {
+						for y := 0; y < rgba.Rect.Dy(); y++ {
+							rgba.Set(x, y, img.At(x, y))
+						}
+					}
+				}
 
-				draw.Draw(sp.GetRGBA(), bds, img, image.Point{}, draw.Over)
+				imgSprite := render.NewSprite(drawzone.Min.X(), drawzone.Min.Y(), rgba)
+				stack.draw(imgSprite)
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			}
 		}
@@ -616,7 +656,9 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 				// draw bullet
 				bulletRadius := textSize / 2
 				bulletOffset := textSize / 3
-				render.DrawCircle(sp.GetRGBA(), getTextColor(node.FirstChild), bulletRadius/2, 1, drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
+				cir := render.NewCircle(getTextColor(node.FirstChild), bulletRadius/2, 1)
+				cir.SetPos(drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
+				stack.draw(cir)
 
 				// TODO: this number
 				bulletGap := bulletRadius * 2
@@ -629,7 +671,7 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 				// draw text
 				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
 				rText.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-				stack.Draw(rText, 1)
+				stack.draw(rText)
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
 			}
 		}
@@ -695,7 +737,7 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 				bds.Max.Y += int(drawzone.Min.Y())
 
 				rText.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-				stack.Draw(rText, 1)
+				stack.draw(rText)
 				rowWidth += bkgDiff.X()
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bkgDiff.X(), 0})
 				col = col.NextSibling
@@ -712,11 +754,11 @@ func addNode(node *ParsedNode, sp *render.Sprite, stack *render.DrawStack, drawz
 		}
 	}
 	drawzone.Min = drawzone.Min.Add(childDrawzoneModifier)
-	childrenHeight := addNode(node.FirstChild, sp, stack, drawzone)
+	childrenHeight := renderNode(node.FirstChild, stack, drawzone)
 	drawzone.Min = drawzone.Min.Sub(childDrawzoneModifier)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(childrenHeight)})
 
-	siblingsHeight := addNode(node.NextSibling, sp, stack, drawzone)
+	siblingsHeight := renderNode(node.NextSibling, stack, drawzone)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(siblingsHeight)})
 	return drawzone.Min.Y() - startHeight
 }
