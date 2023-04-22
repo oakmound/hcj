@@ -60,7 +60,7 @@ func (p *ParsedNode) Draw(buff draw.Image, xOff, yOff float64) {
 		DrawStack: stack,
 	}
 
-	renderNode(p.FirstChild, trackingStack, zone)
+	renderNode(p.FirstChild, trackingStack, zone, p.State)
 
 	// slap it all onto the background
 	stack.PreDraw()
@@ -70,20 +70,19 @@ func (p *ParsedNode) Draw(buff draw.Image, xOff, yOff float64) {
 // ParseAndRenderHTML outputting the internal Node representation along with a sprite that has
 // the given dimensions.
 func ParseAndRenderHTML(htmlReader io.Reader, dims intgeom.Point2) (*ParsedNode, *render.Sprite, error) {
-
-	// TODO: respect the width from css
-	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
-
 	parsed, err := ParseHTML(htmlReader)
 	if err != nil || parsed == nil {
 		return parsed, nil, err
 	}
+
+	// TODO: respect the width from css
+	sp := render.NewEmptySprite(0, 0, dims.X(), dims.Y())
 	parsed.Draw(sp.GetRGBA(), 0, 0)
 
 	return parsed, sp, err
 }
 
-func ParseHTML(htmlReader io.Reader) (*ParsedNode, error) {
+func ParseHTML(htmlReader io.Reader, opts ...ParseNodeOption) (*ParsedNode, error) {
 	rootNode, err := html.Parse(htmlReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse html: %w", err)
@@ -99,9 +98,10 @@ func ParseHTML(htmlReader io.Reader) (*ParsedNode, error) {
 		}
 	}
 	css = DefaultCSS().Merge(css)
+	opts = append(opts, WithCSS(css))
 	var bn *ParsedNode
 	if bodyNode := findHTMLNode(rootNode, "body"); bodyNode != nil {
-		bn = ParseNode(bodyNode, WithCSS(css))
+		bn = ParseNode(bodyNode, opts...)
 	}
 
 	return bn, nil
@@ -511,7 +511,7 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	return offset
 }
 
-func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2) (heightConsumed float64) {
+func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, state InteractiveState) (heightConsumed float64) {
 	if node == nil {
 		return 0
 	}
@@ -550,7 +550,7 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
 			}
 		}
-	case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6":
+	case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6", "a":
 		if node.FirstChild != nil && node.FirstChild.Raw.Type == html.TextNode {
 			text := node.FirstChild.Raw.Data
 
@@ -754,11 +754,11 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		}
 	}
 	drawzone.Min = drawzone.Min.Add(childDrawzoneModifier)
-	childrenHeight := renderNode(node.FirstChild, stack, drawzone)
+	childrenHeight := renderNode(node.FirstChild, stack, drawzone, state)
 	drawzone.Min = drawzone.Min.Sub(childDrawzoneModifier)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(childrenHeight)})
 
-	siblingsHeight := renderNode(node.NextSibling, stack, drawzone)
+	siblingsHeight := renderNode(node.NextSibling, stack, drawzone, state)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(siblingsHeight)})
 	return drawzone.Min.Y() - startHeight
 }

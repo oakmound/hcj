@@ -529,14 +529,14 @@ func allDirLikeBorder(styles map[string]string, key, val string) {
 	}
 }
 
-var bStyles = map[string]struct{}{"none": struct{}{},
-	"hidden": struct{}{}, "dotted": struct{}{},
-	"dashed": struct{}{}, "solid": struct{}{},
-	"double": struct{}{}, "groove": struct{}{},
-	"ridge": struct{}{}, "inset": struct{}{},
-	"outset": struct{}{},
+var bStyles = map[string]struct{}{"none": {},
+	"hidden": {}, "dotted": {},
+	"dashed": {}, "solid": {},
+	"double": {}, "groove": {},
+	"ridge": {}, "inset": {},
+	"outset": {},
 }
-var bWidths = map[string]struct{}{"thin": struct{}{}, "medium": struct{}{}, "thick": struct{}{}}
+var bWidths = map[string]struct{}{"thin": {}, "medium": {}, "thick": {}}
 
 func isABorderWidth(part string) bool {
 	_, err := strconv.Atoi(part)
