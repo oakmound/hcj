@@ -8,16 +8,18 @@ import (
 )
 
 type ParsedNode struct {
-	Raw        *html.Node
-	Tag        string
-	ID         string
-	Classes    []string
-	Style      map[string]string
-	FirstChild *ParsedNode
-	// LastChild
+	Raw         *html.Node
+	Tag         string
+	ID          string
+	Classes     []string
+	Style       map[string]string
+	FirstChild  *ParsedNode
 	NextSibling *ParsedNode
-	// LastSibling
-	//Parent *ParsedNode
+	State       InteractiveState
+}
+
+type InteractiveState struct {
+	VisitedAddresses map[string]struct{}
 }
 
 func (pn *ParsedNode) String() string {
@@ -85,8 +87,9 @@ func nodeTypeString(enumT int) string {
 }
 
 type ParseNodeOptions struct {
-	CSS         CSS
-	ParentStyle map[string]string
+	CSS              CSS
+	ParentStyle      map[string]string
+	InteractiveState InteractiveState
 }
 
 func ParseNode(node *html.Node, opts ...ParseNodeOption) *ParsedNode {
@@ -100,6 +103,7 @@ func ParseNode(node *html.Node, opts ...ParseNodeOption) *ParsedNode {
 		Tag:     node.Data,
 		Classes: getAttributes(node, "class"),
 		Style:   make(map[string]string),
+		State:   cfg.InteractiveState,
 	}
 	// todo: what properties are inherited?
 	// find a table
@@ -128,11 +132,11 @@ INHERIT_LOOP:
 		}
 	}
 	if node.FirstChild != nil {
-		pn.FirstChild = ParseNode(node.FirstChild, WithCSS(cfg.CSS), WithParentStyle(pn.Style))
+		pn.FirstChild = ParseNode(node.FirstChild, WithCSS(cfg.CSS), WithParentStyle(pn.Style), WithInteractiveState(pn.State))
 		//pn.FirstChild.setParent(pn)
 	}
 	if node.NextSibling != nil {
-		pn.NextSibling = ParseNode(node.NextSibling, WithCSS(cfg.CSS), WithParentStyle(cfg.ParentStyle))
+		pn.NextSibling = ParseNode(node.NextSibling, WithCSS(cfg.CSS), WithParentStyle(cfg.ParentStyle), WithInteractiveState(pn.State))
 	}
 	return pn
 }
@@ -193,6 +197,26 @@ func (pn *ParsedNode) SelectorPriority(sel Selector) int16 {
 	for _, pc := range sel.PseudoClasses {
 		// TODO: implement more pseudo class support
 		switch pc.Type {
+		case PseudoClassTypeActive:
+			// TODO
+			return -1000
+		case PseudoClassTypeLink:
+			href := getAttribute(pn.Raw, "href")
+			if _, ok := pn.State.VisitedAddresses[href]; ok {
+				return -1000
+			} else {
+				// todo: how much?
+				priority += 1
+			}
+
+		case PseudoClassTypeVisited:
+			href := getAttribute(pn.Raw, "href")
+			if _, ok := pn.State.VisitedAddresses[href]; ok {
+				// todo: how much?
+				priority += 1
+			} else {
+				return -1000
+			}
 		case PseudoClassTypeEmpty:
 			empty := true
 			WalkChildren(pn.Raw, func(n *html.Node) bool {

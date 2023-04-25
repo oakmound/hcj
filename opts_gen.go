@@ -11,10 +11,16 @@ func WithCSS(v CSS) ParseNodeOption {
 	}
 }
 
-
 func WithParentStyle(v map[string]string) ParseNodeOption {
 	return func(s ParseNodeOptions) ParseNodeOptions {
 		s.ParentStyle = v
+		return s
+	}
+}
+
+func WithInteractiveState(v InteractiveState) ParseNodeOption {
+	return func(s ParseNodeOptions) ParseNodeOptions {
+		s.InteractiveState = v
 		return s
 	}
 }
