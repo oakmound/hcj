@@ -112,7 +112,7 @@ func Test_RenderHTML_Golden(t *testing.T) {
 				in.f.(io.Seeker).Seek(0, io.SeekStart)
 				stepTestName := testName
 				if len(in.cfg.Steps) != 1 {
-					stepTestName += "-" + strconv.Itoa(i)
+					stepTestName += "-step" + strconv.Itoa(i)
 				}
 
 				node, err := hcj.ParseHTML(in.f, hcj.WithInteractiveState(translateConfigState(step)))
