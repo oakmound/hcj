@@ -645,6 +645,8 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		switch node.Raw.Parent.Data {
 		case "ul":
 			if node.FirstChild != nil {
+
+				// TODO: Figure out a way to get actual content size rather than this crude version
 				text := node.FirstChild.Raw.Data
 				textSize := 16.0
 				if size, ok := parseLength(node.Style["font-size"]); ok {
@@ -669,10 +671,12 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
 
 				// draw text
-				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-				rText.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-				stack.draw(rText)
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
+				if node.FirstChild.Raw.Type == html.TextNode {
+					rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+					rText.SetPos(drawzone.Min.X(), drawzone.Min.Y())
+					stack.draw(rText)
+					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
+				}
 			}
 		}
 	case "table":
