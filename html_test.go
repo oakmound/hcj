@@ -120,8 +120,16 @@ func Test_RenderHTML_Golden(t *testing.T) {
 					t.Error(err)
 					return
 				}
+				canvasWidth := 500
+				canvasHeight := 300
 
-				sp := render.NewEmptySprite(0, 0, 500, 300)
+				if in.cfg.CanvasWidth != 0 {
+					canvasWidth = in.cfg.CanvasWidth
+				}
+				if in.cfg.CanvasHeight != 0 {
+					canvasHeight = in.cfg.CanvasHeight
+				}
+				sp := render.NewEmptySprite(0, 0, canvasWidth, canvasHeight)
 				node.Draw(sp.GetRGBA(), 0, 0)
 
 				rgba1 := *sp.GetRGBA()
@@ -157,7 +165,9 @@ func Test_RenderHTML_Golden(t *testing.T) {
 }
 
 type testConfig struct {
-	Steps []testStep `json:"steps"`
+	CanvasWidth  int        `json:"canvasWidth"`
+	CanvasHeight int        `json:"canvasHeight"`
+	Steps        []testStep `json:"steps"`
 }
 
 type testStep struct {
