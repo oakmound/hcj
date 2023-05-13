@@ -409,21 +409,18 @@ func drawBackground(node *ParsedNode, stack *trackingDrawStack, drawzone floatge
 		}
 	}
 
+	// dont consume the child drawzone as we actually want to start at the default start spot
 	_, offsetTop, offsetBot := applyPaddingForFinalOutput(node, drawzone)
-	// if offsetBot.Magnitude() > 0 || offsetTop.Magnitude() > 0 {
-	// 	fmt.Println(offsetTop, offsetBot)
-	// }
 
 	bkgDim := parseNodeDims(node, drawzone)
-
+	// TODO: How do we actually handle no taller?
 	if bkgDim.H() > noTallerThan {
 		bkgDim.Max[1] = bkgDim.Min[1] + noTallerThan
 	}
 	if bkgDim.W() > noWiderThan {
 		bkgDim.Max[0] = bkgDim.Min[0] + noWiderThan
 	}
-
-	// bkgDim.Min = bkgDim.Min.Add(offsetTop)
+	// apply padding total overhead to the max to make sure the background covers all that it needs to
 	bkgDim.Max = bkgDim.Max.Add(offsetTop, offsetBot)
 
 	parsedColor, _, inheritable := parseHTMLColor(bkg)
@@ -455,8 +452,6 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	offset := floatgeom.Point2{}
 	box := render.NewColorBox(int(bkgDim.W()+maxSize*2), int(bkgDim.H()+maxSize*2), color.RGBA{0, 0, 0, 0})
 
-	// backingW := int(bkgDim.W() + offsetTop.X())
-	// backingH := int(bkgDim.H() + offsetTop.Y())
 	backingW := int(bkgDim.W())
 	backingH := int(bkgDim.H())
 
@@ -616,10 +611,7 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 			}
 			nextChild = nextChild.NextSibling
 		}
-		childDraw, offsets, offsetsBot := applyPaddingForFinalOutput(node, drawzone)
-		if offsets.Magnitude() > 0 {
-			fmt.Println(offsets)
-		}
+		childDraw, _, offsetsBot := applyPaddingForFinalOutput(node, drawzone)
 
 		var textVBuffer float64
 		borderYOff := 0.0
@@ -633,9 +625,9 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 			}
 			setIntPos(rText, bds)
 			stack.draw(rText)
-			// drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			childDraw.Min = childDraw.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 		}
+		// We only care about y increment from padding and the like
 		drawzone.Min[1] = childDraw.Min.Y()
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, borderYOff})
