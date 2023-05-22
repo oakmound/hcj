@@ -359,6 +359,16 @@ func parseNodeDims(node *ParsedNode, drawzone floatgeom.Rect2) floatgeom.Rect2 {
 	if h == 0 {
 		h = drawzone.H()
 	}
+
+	pl, _ := parseLength(node.Style["padding-left"])
+	pr, _ := parseLength(node.Style["padding-right"])
+
+	pt, _ := parseLength(node.Style["padding-top"])
+	pb, _ := parseLength(node.Style["padding-bottom"])
+
+	w += pl + pr
+	h += pt + pb
+
 	return floatgeom.NewRect2WH(0, 0, w, h)
 }
 
@@ -394,27 +404,36 @@ func drawBackground(node *ParsedNode, stack *trackingDrawStack, drawzone floatge
 	bkg, ok := node.Style["background"]
 	if !ok {
 		bkg, ok = node.Style["background-color"]
+		if !ok {
+			return floatgeom.Point2{}
+		}
 	}
-	if ok {
-		bkgDim := parseNodeDims(node, drawzone)
-		if bkgDim.H() > noTallerThan {
-			bkgDim.Max[1] = bkgDim.Min[1] + noTallerThan
-		}
-		if bkgDim.W() > noWiderThan {
-			bkgDim.Max[0] = bkgDim.Min[0] + noWiderThan
-		}
-		parsedColor, _, inheritable := parseHTMLColor(bkg)
-		if inheritable {
-			parsedColor, _, _ = parseHTMLColor(node.Style["color"])
-		}
-		parsedColor = applyOpacity(parsedColor, node.Style["opacity"])
-		bx := render.NewColorBox(int(bkgDim.W()), int(bkgDim.H()), parsedColor)
-		bds := offsetBoundsByDrawzone(bx, drawzone)
-		bx.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-		stack.draw(bx)
-		return floatgeom.Point2{float64(bds.Dx()), float64(bds.Dy())}
+
+	// dont consume the child drawzone as we actually want to start at the default start spot
+	_, offsetTop, offsetBot := applyPaddingForFinalOutput(node, drawzone)
+
+	bkgDim := parseNodeDims(node, drawzone)
+	// TODO: How do we actually handle no taller?
+	if bkgDim.H() > noTallerThan {
+		bkgDim.Max[1] = bkgDim.Min[1] + noTallerThan
 	}
-	return floatgeom.Point2{}
+	if bkgDim.W() > noWiderThan {
+		bkgDim.Max[0] = bkgDim.Min[0] + noWiderThan
+	}
+	// apply padding total overhead to the max to make sure the background covers all that it needs to
+	bkgDim.Max = bkgDim.Max.Add(offsetTop, offsetBot)
+
+	parsedColor, _, inheritable := parseHTMLColor(bkg)
+	if inheritable {
+		parsedColor, _, _ = parseHTMLColor(node.Style["color"])
+	}
+	parsedColor = applyOpacity(parsedColor, node.Style["opacity"])
+	bx := render.NewColorBox(int(bkgDim.W()), int(bkgDim.H()), parsedColor)
+	bds := offsetBoundsByDrawzone(bx, drawzone)
+	bx.SetPos(drawzone.Min.X(), drawzone.Min.Y())
+	stack.draw(bx)
+	return floatgeom.Point2{float64(bds.Dx()), float64(bds.Dy())}
+
 }
 
 func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, noTallerThan, noWiderThan float64) floatgeom.Point2 {
@@ -426,9 +445,16 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	if bkgDim.W() > noWiderThan {
 		bkgDim.Max[0] = bkgDim.Min[0] + noWiderThan
 	}
+
+	_, offsetTop, offsetBot := applyPaddingForFinalOutput(node, drawzone)
+	bkgDim.Max = bkgDim.Max.Add(offsetTop, offsetBot)
 	minOffset := floatgeom.Point2{}
 	offset := floatgeom.Point2{}
 	box := render.NewColorBox(int(bkgDim.W()+maxSize*2), int(bkgDim.H()+maxSize*2), color.RGBA{0, 0, 0, 0})
+
+	backingW := int(bkgDim.W())
+	backingH := int(bkgDim.H())
+
 	// remove space for border and the populate the border element
 	// TODO: actually do this per direction
 	width, brdColor, style, err := parseBorderAttributes("top", node.Style)
@@ -459,8 +485,8 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		switch style {
 		case "hidden", "none":
 		case "solid":
-			for x := 0; x < int(bkgDim.W()); x++ {
-				for y := int(bkgDim.Max.Y()); y < int(bkgDim.Max.Y())+width; y++ {
+			for x := 0; x < backingW; x++ {
+				for y := backingH; y < int(bkgDim.Max.Y())+width; y++ {
 					box.Set(x, y, brdColor)
 				}
 			}
@@ -478,7 +504,7 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		case "hidden", "none":
 		case "solid":
 			for x := 0; x < width; x++ {
-				for y := 0; y < int(bkgDim.Max.Y()); y++ {
+				for y := 0; y < backingH; y++ {
 					box.Set(x, y, brdColor)
 				}
 			}
@@ -494,8 +520,8 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		switch style {
 		case "hidden", "none":
 		case "solid":
-			for x := int(bkgDim.Max.X()) - width; x <= int(bkgDim.Max.X()); x++ {
-				for y := 0; y < int(bkgDim.Max.Y()); y++ {
+			for x := backingW - width; x <= backingW; x++ {
+				for y := 0; y < backingH; y++ {
 					box.Set(x, y, brdColor)
 				}
 			}
@@ -587,21 +613,27 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 			}
 			nextChild = nextChild.NextSibling
 		}
+		childDraw, _, offsetsBot := applyPaddingForFinalOutput(node, drawzone)
+
 		var textVBuffer float64
 		borderYOff := 0.0
 		for i, text := range texts {
-			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			rText, textSize, bds := formatTextAsSprite(node, childDraw, 16.0, text)
 			textVBuffer = textSize / 5 // todo: where is this from?
 			// todo: is this the background of p or the background of the text content child?
 			if i == 0 {
 				borderYOff = drawboxModel(node, stack, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
+
 			}
 			setIntPos(rText, bds)
 			stack.draw(rText)
-			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
+			childDraw.Min = childDraw.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 		}
+		// We only care about y increment from padding and the like
+		drawzone.Min[1] = childDraw.Min.Y()
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, borderYOff})
+		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, offsetsBot.Y()})
 
 	case "img":
 		for _, atr := range node.Raw.Attr {
@@ -677,14 +709,23 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				bulletGap := bulletRadius * 2
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
 
+				paddingL, _ := parseLength(node.Style["padding-left"])
+				childDrawzoneModifier[0] = paddingL
+				paddingT, _ := parseLength(node.Style["padding-top"])
+				childDrawzoneModifier[1] = paddingT
+
+				childDrawZone := drawzone
+				childDrawZone.Min.Add(childDrawzoneModifier)
+
 				// todo: is this the background of ul or the background of the text content child?
 				// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
-				drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
+
+				drawBackground(node, stack, childDrawZone, textSize+textVBuffer, math.MaxFloat64)
 
 				// draw text
 				if textNode.Raw.Type == html.TextNode {
 					rText, _, bds := formatTextAsSprite(textNode, drawzone, 16.0, text)
-					rText.SetPos(drawzone.Min.X(), drawzone.Min.Y())
+					rText.SetPos(childDrawZone.Min.X(), childDrawZone.Min.Y())
 					stack.draw(rText)
 					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
 				}
@@ -867,4 +908,21 @@ type hasBounds interface {
 // TODO: Make the image rectangle be a float64 bounds type thing so we dont do this
 func setIntPos(s *render.Sprite, bds image.Rectangle) {
 	s.SetPos(float64(bds.Min.X), float64(bds.Min.Y))
+}
+
+func applyPaddingForFinalOutput(node *ParsedNode, drawzone floatgeom.Rect2) (floatgeom.Rect2, floatgeom.Point2, floatgeom.Point2) {
+	paddingL, _ := parseLength(node.Style["padding-left"])
+	paddingT, _ := parseLength(node.Style["padding-top"])
+
+	childDrawTop := floatgeom.Point2{paddingL, paddingT}
+
+	paddingR, _ := parseLength(node.Style["padding-right"])
+	paddingB, _ := parseLength(node.Style["padding-bottom"])
+	childDrawBot := floatgeom.Point2{paddingR, paddingB}
+
+	childDrawZone := floatgeom.Rect2{}
+	childDrawZone.Min = drawzone.Min.Add(childDrawTop)
+	childDrawZone.Max = drawzone.Max.Add(childDrawBot)
+	return childDrawZone, childDrawTop, childDrawBot
+
 }
