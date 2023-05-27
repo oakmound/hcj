@@ -549,6 +549,8 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	}
 	childDrawzoneModifier := floatgeom.Point2{}
 
+	skipChildren := false
+
 	// TODO: inline vs block / content categories
 	switch node.Tag {
 	case "div":
@@ -678,8 +680,17 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		case "ul":
 			if node.FirstChild != nil {
 
+				// TODO: better extraction of text from children nodes
+				// This points out that each node should decide how its children are rendered in context (dfs style, probably),
+				// instead of always drawing all children after handling each parent node.
+				textNode := node.FirstChild
+				if textNode.Raw.Type != html.TextNode && textNode.FirstChild != nil && textNode.FirstChild.Raw.Type == html.TextNode {
+					textNode = textNode.FirstChild
+					skipChildren = true
+				}
+
 				// TODO: Figure out a way to get actual content size rather than this crude version
-				text := node.FirstChild.Raw.Data
+				text := textNode.Raw.Data
 				textSize := 16.0
 				if size, ok := parseLength(node.Style["font-size"]); ok {
 					textSize = size
@@ -712,8 +723,8 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				drawBackground(node, stack, childDrawZone, textSize+textVBuffer, math.MaxFloat64)
 
 				// draw text
-				if node.FirstChild.Raw.Type == html.TextNode {
-					rText, _, bds := formatTextAsSprite(node, childDrawZone, 16.0, text)
+				if textNode.Raw.Type == html.TextNode {
+					rText, _, bds := formatTextAsSprite(textNode, drawzone, 16.0, text)
 					rText.SetPos(childDrawZone.Min.X(), childDrawZone.Min.Y())
 					stack.draw(rText)
 					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
@@ -799,7 +810,10 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		}
 	}
 	drawzone.Min = drawzone.Min.Add(childDrawzoneModifier)
-	childrenHeight := renderNode(node.FirstChild, stack, drawzone, state)
+	var childrenHeight float64
+	if !skipChildren {
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
+	}
 	drawzone.Min = drawzone.Min.Sub(childDrawzoneModifier)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(childrenHeight)})
 
