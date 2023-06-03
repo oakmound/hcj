@@ -547,12 +547,13 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	if drawzone.Min.X() < margin.Min.X() {
 		drawzone.Min[0] = margin.Min[0]
 	}
-	childDrawzoneModifier := floatgeom.Point2{}
-
-	skipChildren := false
+	var childrenHeight float64
 
 	// TODO: inline vs block / content categories
 	switch node.Tag {
+	case "figure":
+		// ignore
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "div":
 		textSize := 16.0
 		if size, ok := parseLength(node.Style["font-size"]); ok {
@@ -578,6 +579,7 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
 			}
 		}
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6", "a":
 		if node.FirstChild != nil && node.FirstChild.Raw.Type == html.TextNode {
 			text := node.FirstChild.Raw.Data
@@ -596,6 +598,7 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 			stack.draw(rText)
 			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
 		}
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "p":
 		nextChild := node.FirstChild
 		texts := []string{""}
@@ -635,6 +638,7 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, borderYOff})
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, offsetsBot.Y()})
 
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "img":
 		for _, atr := range node.Raw.Attr {
 			if atr.Key == "src" {
@@ -669,16 +673,22 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			}
 		}
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "ul":
 		// move right, defer to li to look back upward at ul to determine its prefix
 		// todo: this number appears to be too big compared to firefox; I think padding doesn't take into account the bullet width
 		padding, _ := parseLength(node.Style["padding-left"])
-		childDrawzoneModifier[0] = padding
 		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, 16})
+		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{padding, 0})
+		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
+		drawzone.Min = drawzone.Min.Sub(floatgeom.Point2{padding, 0})
 	case "li":
 		switch node.Raw.Parent.Data {
 		case "ul":
 			if node.FirstChild != nil {
+
+				//TODO: don't do this
+				skipChildren := false
 
 				// TODO: better extraction of text from children nodes
 				// This points out that each node should decide how its children are rendered in context (dfs style, probably),
@@ -710,12 +720,10 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
 
 				paddingL, _ := parseLength(node.Style["padding-left"])
-				childDrawzoneModifier[0] = paddingL
 				paddingT, _ := parseLength(node.Style["padding-top"])
-				childDrawzoneModifier[1] = paddingT
 
 				childDrawZone := drawzone
-				childDrawZone.Min.Add(childDrawzoneModifier)
+				childDrawZone.Min.Add(floatgeom.Point2{paddingL, paddingT})
 
 				// todo: is this the background of ul or the background of the text content child?
 				// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
@@ -728,6 +736,11 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 					rText.SetPos(childDrawZone.Min.X(), childDrawZone.Min.Y())
 					stack.draw(rText)
 					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
+				}
+				if !skipChildren {
+					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{paddingL, paddingT})
+					childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
+					drawzone.Min = drawzone.Min.Sub(floatgeom.Point2{paddingL, paddingT})
 				}
 			}
 		}
@@ -808,15 +821,9 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				nextRow = nextRow.NextSibling
 			}
 		}
-	}
-	drawzone.Min = drawzone.Min.Add(childDrawzoneModifier)
-	var childrenHeight float64
-	if !skipChildren {
 		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	}
-	drawzone.Min = drawzone.Min.Sub(childDrawzoneModifier)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(childrenHeight)})
-
 	siblingsHeight := renderNode(node.NextSibling, stack, drawzone, state)
 	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(siblingsHeight)})
 	return drawzone.Min.Y() - startHeight
