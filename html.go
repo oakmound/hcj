@@ -176,6 +176,14 @@ func parseSemiSeparatedMapWithOrder(data string) ([]string, map[string]string) {
 	return outOrder, out
 }
 
+func parseLengthWithDefault(l string, def float64) float64 {
+	v, ok := parseLength(l)
+	if !ok {
+		return def
+	}
+	return v
+}
+
 func parseLength(l string) (float64, bool) {
 	if lpx := strings.TrimSuffix(l, "px"); lpx != l {
 		length, err := strconv.Atoi(lpx)
@@ -549,36 +557,34 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	}
 	var childrenHeight float64
 
+	if node.Raw.Type == html.TextNode {
+		// TODO: move more blocks from tag switch here
+		switch node.Raw.Parent.Data {
+		case "div":
+			textSize := parseLengthWithDefault(node.Style["font-size"], 16)
+			textVBuffer := textSize / 5 // todo: where is this from?
+
+			text := node.Raw.Data
+			rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			setIntPos(rText, bds)
+			stack.draw(rText)
+
+			// Not sure if this is needed but definitely isn't if there is no text. see hcj02
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
+		}
+	}
+
 	// TODO: inline vs block / content categories
 	switch node.Tag {
 	case "figure":
 		// ignore
 		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "div":
-		textSize := 16.0
-		if size, ok := parseLength(node.Style["font-size"]); ok {
-			textSize = float64(size)
-		}
+		textSize := parseLengthWithDefault(node.Style["font-size"], 16)
 		textVBuffer := textSize / 5 // todo: where is this from?
 		// TODO: spacing around p and div is incorrect
 		// TODO: div and p are really similar and yet subtly different, why?
 		drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
-
-		// TODO: this is not right; children are drawn below already;
-		// how do we know whether a node is text content?
-		if node.FirstChild != nil && node.FirstChild.FirstChild == nil {
-			if node.FirstChild.Raw.Type == html.TextNode {
-				text := node.FirstChild.Raw.Data
-				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-
-				setIntPos(rText, bds)
-				stack.draw(rText)
-
-				// Not sure if this is needed but definitely isnt if there is no text. see hcj02
-
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
-			}
-		}
 		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
 	case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6", "a":
 		if node.FirstChild != nil && node.FirstChild.Raw.Type == html.TextNode {
