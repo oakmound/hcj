@@ -113,6 +113,9 @@ func ParseNode(node *html.Node, opts ...ParseNodeOption) *ParsedNode {
 		"background":       {},
 		"background-color": {},
 		"font-style":       {},
+		"display":          {},
+		"font-size":        {},
+		"font-weight":      {},
 	}
 	pn.CalculateStyle(cfg.CSS)
 INHERIT_LOOP:
