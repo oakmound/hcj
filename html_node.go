@@ -58,26 +58,6 @@ func (pn *ParsedNode) NestedString(indent int, siblingNumber int) string {
 	return out
 }
 
-func nodeTypeString(enumT int) string {
-	switch enumT {
-	case 0:
-		return "error"
-	case 1:
-		return "text"
-	case 2:
-		return "document"
-	case 3:
-		return "element"
-	case 4:
-		return "comment"
-	case 5:
-		return "doc"
-	case 6:
-		return "raw"
-	}
-	return "unknown"
-}
-
 type ParseNodeOptions struct {
 	CSS              CSS
 	ParentStyle      map[string]string
