@@ -567,7 +567,7 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 		}
 		// TODO: move more blocks from tag switch here
 		switch node.Raw.Parent.Data {
-		case "div":
+		case "div", "li":
 			rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
 			setIntPos(rText, bds)
 			stack.draw(rText)
@@ -680,21 +680,6 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 			switch node.Raw.Parent.Data {
 			case "ul":
 				if node.FirstChild != nil {
-
-					//TODO: don't do this
-					skipChildren := false
-
-					// TODO: better extraction of text from children nodes
-					// This points out that each node should decide how its children are rendered in context (dfs style, probably),
-					// instead of always drawing all children after handling each parent node.
-					textNode := node.FirstChild
-					if textNode.Raw.Type != html.TextNode && textNode.FirstChild != nil && textNode.FirstChild.Raw.Type == html.TextNode {
-						textNode = textNode.FirstChild
-						skipChildren = true
-					}
-
-					// TODO: Figure out a way to get actual content size rather than this crude version
-					text := textNode.Raw.Data
 					textSize := 16.0
 					if size, ok := parseLength(node.Style["font-size"]); ok {
 						textSize = size
@@ -711,31 +696,19 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 
 					// TODO: this number
 					bulletGap := bulletRadius * 2
-					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
 
 					paddingL, _ := parseLength(node.Style["padding-left"])
 					paddingT, _ := parseLength(node.Style["padding-top"])
 
 					childDrawZone := drawzone
-					childDrawZone.Min.Add(floatgeom.Point2{paddingL, paddingT})
+					childDrawZone.Min = childDrawZone.Min.Add(floatgeom.Point2{paddingL, paddingT})
+					childDrawZone.Min = childDrawZone.Min.Add(floatgeom.Point2{bulletGap, 0})
 
 					// todo: is this the background of ul or the background of the text content child?
 					// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
 
 					drawBackground(node, stack, childDrawZone, textSize+textVBuffer, math.MaxFloat64)
-
-					// draw text
-					if textNode.Raw.Type == html.TextNode {
-						rText, _, bds := formatTextAsSprite(textNode, drawzone, 16.0, text)
-						rText.SetPos(childDrawZone.Min.X(), childDrawZone.Min.Y())
-						stack.draw(rText)
-						drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
-					}
-					if !skipChildren {
-						drawzone.Min = drawzone.Min.Add(floatgeom.Point2{paddingL, paddingT})
-						consumed = renderNode(node.FirstChild, stack, drawzone, state)
-						drawzone.Min = drawzone.Min.Sub(floatgeom.Point2{paddingL, paddingT})
-					}
+					consumed = renderNode(node.FirstChild, stack, childDrawZone, state)
 				}
 			}
 		case "table":
