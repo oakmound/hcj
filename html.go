@@ -695,8 +695,8 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 			consumed = renderNode(node.FirstChild, stack, drawzone, state)
 			drawzone.Min = drawzone.Min.Sub(floatgeom.Point2{padding, 0})
 		case "li":
-			switch node.Raw.Parent.Data {
-			case "ul":
+			switch node.Style["list-style-type"] {
+			case "disc", "":
 				textSize := 16.0
 				if size, ok := parseLength(node.Style["font-size"]); ok {
 					textSize = size
@@ -718,13 +718,15 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				childDrawZone.Min = childDrawZone.Min.Add(floatgeom.Point2{paddingL, paddingT})
 				childDrawZone.Min = childDrawZone.Min.Add(floatgeom.Point2{bulletRadius * 2, 0})
 
-				// todo: is this the background of ul or the background of the text content child?
+				// q: is this the background of ul or the background of the text content child? a: child
 				// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
 
 				drawBackground(node, stack, childDrawZone, textSize+textVBuffer, math.MaxFloat64)
 				if node.FirstChild != nil {
 					consumed = renderNode(node.FirstChild, stack, childDrawZone, state)
 				}
+			default:
+				panic("unhandled")
 			}
 			// TODO: thead
 			// TODO: tfoot
