@@ -652,38 +652,36 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 
 			consumed = renderNode(node.FirstChild, stack, drawzone, state)
 		case "img":
-			for _, atr := range node.Raw.Attr {
-				if atr.Key == "src" {
-					r, err := loadSrc(atr.Val)
-					if err != nil {
-						fmt.Println(err)
-						r.Close()
-						continue
-					}
-					img, _, err := image.Decode(r)
-					if err != nil {
-						r.Close()
-						continue
-					}
+			srcAttr := getAttribute(node.Raw, "src")
+			if srcAttr != "" {
+				r, err := loadSrc(srcAttr)
+				if err != nil {
+					fmt.Println(err)
 					r.Close()
-					bds := offsetBoundsByDrawzone(img, drawzone)
-					var rgba *image.RGBA
-					switch v := img.(type) {
-					case *image.RGBA:
-						rgba = v
-					default:
-						rgba = image.NewRGBA(img.Bounds())
-						for x := 0; x < rgba.Rect.Dx(); x++ {
-							for y := 0; y < rgba.Rect.Dy(); y++ {
-								rgba.Set(x, y, img.At(x, y))
-							}
+					break
+				}
+				img, _, err := image.Decode(r)
+				if err != nil {
+					r.Close()
+					break
+				}
+				r.Close()
+				bds := offsetBoundsByDrawzone(img, drawzone)
+				var rgba *image.RGBA
+				switch v := img.(type) {
+				case *image.RGBA:
+					rgba = v
+				default:
+					rgba = image.NewRGBA(img.Bounds())
+					for x := 0; x < rgba.Rect.Dx(); x++ {
+						for y := 0; y < rgba.Rect.Dy(); y++ {
+							rgba.Set(x, y, img.At(x, y))
 						}
 					}
-
-					imgSprite := render.NewSprite(drawzone.Min.X(), drawzone.Min.Y(), rgba)
-					stack.draw(imgSprite)
-					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 				}
+				imgSprite := render.NewSprite(drawzone.Min.X(), drawzone.Min.Y(), rgba)
+				stack.draw(imgSprite)
+				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			}
 			consumed = renderNode(node.FirstChild, stack, drawzone, state)
 		case "ul":
