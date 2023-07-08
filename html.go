@@ -176,6 +176,14 @@ func parseSemiSeparatedMapWithOrder(data string) ([]string, map[string]string) {
 	return outOrder, out
 }
 
+func parseLengthWithDefault(l string, def float64) float64 {
+	v, ok := parseLength(l)
+	if !ok {
+		return def
+	}
+	return v
+}
+
 func parseLength(l string) (float64, bool) {
 	if lpx := strings.TrimSuffix(l, "px"); lpx != l {
 		length, err := strconv.Atoi(lpx)
@@ -537,117 +545,125 @@ func drawBorder(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 	return offset
 }
 
-func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, state InteractiveState) (heightConsumed float64) {
+func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.Rect2, state InteractiveState) (consumed floatgeom.Point2) {
 	if node == nil {
-		return 0
+		return consumed
 	}
-	startHeight := drawzone.Min.Y()
+	var siblingDrawn bool
+	start := drawzone.Min
 	margin := parseMargin(node.Style)
 	drawzone.Min[1] += margin.Min[1]
 	if drawzone.Min.X() < margin.Min.X() {
 		drawzone.Min[0] = margin.Min[0]
 	}
-	childDrawzoneModifier := floatgeom.Point2{}
-
-	skipChildren := false
-
-	// TODO: inline vs block / content categories
-	switch node.Tag {
-	case "div":
-		textSize := 16.0
-		if size, ok := parseLength(node.Style["font-size"]); ok {
-			textSize = float64(size)
-		}
+	if node.Raw.Type == html.TextNode {
+		textSize := parseLengthWithDefault(node.Style["font-size"], 16)
 		textVBuffer := textSize / 5 // todo: where is this from?
-		// TODO: spacing around p and div is incorrect
-		// TODO: div and p are really similar and yet subtly different, why?
-		drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
 
-		// TODO: this is not right; children are drawn below already;
-		// how do we know whether a node is text content?
-		if node.FirstChild != nil && node.FirstChild.FirstChild == nil {
-			if node.FirstChild.Raw.Type == html.TextNode {
-				text := node.FirstChild.Raw.Data
-				rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+		text := node.Raw.Data
 
-				setIntPos(rText, bds)
-				stack.draw(rText)
-
-				// Not sure if this is needed but definitely isnt if there is no text. see hcj02
-
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer + float64(bds.Dy())})
-			}
+		// This is not correct?
+		if !unicode.IsSpace(rune(text[len(text)-1])) {
+			text += " "
 		}
-	case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6", "a":
-		if node.FirstChild != nil && node.FirstChild.Raw.Type == html.TextNode {
-			text := node.FirstChild.Raw.Data
-
-			// This is not correct?
-			if !unicode.IsSpace(rune(text[len(text)-1])) {
-				text += " "
+		// TODO: move more blocks from tag switch here
+		switch node.Raw.Parent.Data {
+		case "th", "td":
+			// Why don't the other text blocks need this width handling?
+			rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			w := float64(bds.Dx())
+			if w < 10 {
+				w = 10
 			}
-			rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, text)
-			textVBuffer := textSize / 5 // todo: where is this from?
-			// todo: is this the background of p or the background of the text content child? // its text child :(
-
-			drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
-
-			setIntPos(rText, bds)
-			stack.draw(rText)
-			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{float64(bds.Dx()), 0})
-		}
-	case "p":
-		nextChild := node.FirstChild
-		texts := []string{""}
-		textIndex := 0
-		for nextChild != nil {
-			switch nextChild.Raw.Type {
-			case html.TextNode:
-				text := nextChild.Raw.Data
-				texts[textIndex] += text
-			default:
-				if nextChild.Tag == "br" {
-					textIndex++
-					texts = append(texts, "")
+			if wd, ok := node.Style["width"]; ok {
+				parsed, ok := parseLength(wd)
+				if ok {
+					w = parsed
 				}
 			}
-			nextChild = nextChild.NextSibling
-		}
-		childDraw, _, offsetsBot := applyPaddingForFinalOutput(node, drawzone)
-
-		var textVBuffer float64
-		borderYOff := 0.0
-		for i, text := range texts {
-			rText, textSize, bds := formatTextAsSprite(node, childDraw, 16.0, text)
-			textVBuffer = textSize / 5 // todo: where is this from?
-			// todo: is this the background of p or the background of the text content child?
-			if i == 0 {
-				borderYOff = drawboxModel(node, stack, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
-
-			}
+			// TODO: other text blocks should also draw their own backgrounds
+			bkgDiff := drawBackground(node, stack, drawzone, textSize+textVBuffer, w)
 			setIntPos(rText, bds)
 			stack.draw(rText)
-			childDraw.Min = childDraw.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
-		}
-		// We only care about y increment from padding and the like
-		drawzone.Min[1] = childDraw.Min.Y()
-		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
-		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, borderYOff})
-		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, offsetsBot.Y()})
+			consumed = bkgDiff
+		case "div", "li":
+			rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			setIntPos(rText, bds)
+			stack.draw(rText)
 
-	case "img":
-		for _, atr := range node.Raw.Attr {
-			if atr.Key == "src" {
-				r, err := loadSrc(atr.Val)
+			// Not sure if this is needed but definitely isn't if there is no text. see hcj02
+			consumed[1] = textVBuffer + float64(bds.Dy())
+		case "span", "address", "h1", "h2", "h3", "h4", "h5", "h6", "a":
+			rText, _, bds := formatTextAsSprite(node, drawzone, 16.0, text)
+			setIntPos(rText, bds)
+			stack.draw(rText)
+			consumed[0] = float64(bds.Dx())
+		}
+	} else {
+		// TODO: inline vs block / content categories
+		switch node.Tag {
+		case "figure", "tbody", "table", "tr":
+			consumed = renderNode(node.FirstChild, stack, drawzone, state)
+		case "div", "span", "address", "h1", "h2", "h3", "h4", "h5", "h6", "a":
+			textSize := parseLengthWithDefault(node.Style["font-size"], 16)
+			textVBuffer := textSize / 5 // todo: where is this from?
+			// TODO: spacing around p and div is incorrect
+			// TODO: div and p are really similar and yet subtly different, why?
+			drawBackground(node, stack, drawzone, textSize+textVBuffer, math.MaxFloat64)
+			consumed = renderNode(node.FirstChild, stack, drawzone, state)
+		case "p":
+			nextChild := node.FirstChild
+			texts := []string{""}
+			textIndex := 0
+			for nextChild != nil {
+				switch nextChild.Raw.Type {
+				case html.TextNode:
+					text := nextChild.Raw.Data
+					texts[textIndex] += text
+				default:
+					if nextChild.Tag == "br" {
+						textIndex++
+						texts = append(texts, "")
+					}
+				}
+				nextChild = nextChild.NextSibling
+			}
+			childDraw, _, offsetsBot := applyPaddingForFinalOutput(node, drawzone)
+
+			var textVBuffer float64
+			borderYOff := 0.0
+			for i, text := range texts {
+				rText, textSize, bds := formatTextAsSprite(node, childDraw, 16.0, text)
+				textVBuffer = textSize / 5 // todo: where is this from?
+				// todo: is this the background of p or the background of the text content child?
+				if i == 0 {
+					borderYOff = drawboxModel(node, stack, drawzone, (textSize+textVBuffer)*float64(len(texts)), math.MaxFloat64)
+
+				}
+				setIntPos(rText, bds)
+				stack.draw(rText)
+				childDraw.Min = childDraw.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
+			}
+			// We only care about y increment from padding and the like
+			drawzone.Min[1] = childDraw.Min.Y()
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, textVBuffer})
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, borderYOff})
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, offsetsBot.Y()})
+
+			consumed = renderNode(node.FirstChild, stack, drawzone, state)
+		case "img":
+			srcAttr := getAttribute(node.Raw, "src")
+			if srcAttr != "" {
+				r, err := loadSrc(srcAttr)
 				if err != nil {
 					fmt.Println(err)
 					r.Close()
-					continue
+					break
 				}
 				img, _, err := image.Decode(r)
 				if err != nil {
 					r.Close()
-					continue
+					break
 				}
 				r.Close()
 				bds := offsetBoundsByDrawzone(img, drawzone)
@@ -663,34 +679,22 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 						}
 					}
 				}
-
 				imgSprite := render.NewSprite(drawzone.Min.X(), drawzone.Min.Y(), rgba)
 				stack.draw(imgSprite)
 				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(bds.Dy())})
 			}
-		}
-	case "ul":
-		// move right, defer to li to look back upward at ul to determine its prefix
-		// todo: this number appears to be too big compared to firefox; I think padding doesn't take into account the bullet width
-		padding, _ := parseLength(node.Style["padding-left"])
-		childDrawzoneModifier[0] = padding
-		drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, 16})
-	case "li":
-		switch node.Raw.Parent.Data {
+			consumed = renderNode(node.FirstChild, stack, drawzone, state)
 		case "ul":
-			if node.FirstChild != nil {
-
-				// TODO: better extraction of text from children nodes
-				// This points out that each node should decide how its children are rendered in context (dfs style, probably),
-				// instead of always drawing all children after handling each parent node.
-				textNode := node.FirstChild
-				if textNode.Raw.Type != html.TextNode && textNode.FirstChild != nil && textNode.FirstChild.Raw.Type == html.TextNode {
-					textNode = textNode.FirstChild
-					skipChildren = true
-				}
-
-				// TODO: Figure out a way to get actual content size rather than this crude version
-				text := textNode.Raw.Data
+			// move right, defer to li to look back upward at ul to determine its prefix
+			// todo: this number appears to be too big compared to firefox; I think padding doesn't take into account the bullet width
+			padding, _ := parseLength(node.Style["padding-left"])
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, 16})
+			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{padding, 0})
+			consumed = renderNode(node.FirstChild, stack, drawzone, state)
+			drawzone.Min = drawzone.Min.Sub(floatgeom.Point2{padding, 0})
+		case "li":
+			switch node.Style["list-style-type"] {
+			case "disc", "":
 				textSize := 16.0
 				if size, ok := parseLength(node.Style["font-size"]); ok {
 					textSize = size
@@ -701,125 +705,63 @@ func renderNode(node *ParsedNode, stack *trackingDrawStack, drawzone floatgeom.R
 				// draw bullet
 				bulletRadius := textSize / 2
 				bulletOffset := textSize / 3
-				cir := render.NewCircle(getTextColor(node.FirstChild), bulletRadius/2, 1)
+				cir := render.NewCircle(getTextColor(node), bulletRadius/2, 1)
 				cir.SetPos(drawzone.Min.X(), drawzone.Min.Y()+bulletOffset)
 				stack.draw(cir)
 
-				// TODO: this number
-				bulletGap := bulletRadius * 2
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bulletGap, 0})
-
 				paddingL, _ := parseLength(node.Style["padding-left"])
-				childDrawzoneModifier[0] = paddingL
 				paddingT, _ := parseLength(node.Style["padding-top"])
-				childDrawzoneModifier[1] = paddingT
 
 				childDrawZone := drawzone
-				childDrawZone.Min.Add(childDrawzoneModifier)
+				childDrawZone.Min = childDrawZone.Min.Add(floatgeom.Point2{paddingL, paddingT})
+				childDrawZone.Min = childDrawZone.Min.Add(floatgeom.Point2{bulletRadius * 2, 0})
 
-				// todo: is this the background of ul or the background of the text content child?
+				// q: is this the background of ul or the background of the text content child? a: child
 				// TODO: this background does not extend down to the bottom of letters like 'g' and 'y'
 
 				drawBackground(node, stack, childDrawZone, textSize+textVBuffer, math.MaxFloat64)
-
-				// draw text
-				if textNode.Raw.Type == html.TextNode {
-					rText, _, bds := formatTextAsSprite(textNode, drawzone, 16.0, text)
-					rText.SetPos(childDrawZone.Min.X(), childDrawZone.Min.Y())
-					stack.draw(rText)
-					drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-bulletGap, textVBuffer + float64(bds.Dy())})
+				if node.FirstChild != nil {
+					consumed = renderNode(node.FirstChild, stack, childDrawZone, state)
 				}
+			default:
+				panic("unhandled")
 			}
-		}
-	case "table":
-		// TODO: thead
-		// TODO: tfoot
-		// TODO: colgroup
-		// TODO: col
-		// TODO: caption
-		// TODO: tbody
-		// TODO: th
-		// Assert we are getting a series of 'tr's, each with the same count of 'td's or 'th's.
-		unknown := node.FirstChild
-		if unknown == nil {
-			fmt.Println("found table without unknown buffer cell")
-			return
-		}
-		tBody := unknown.NextSibling
-		if tBody.Tag != "tbody" {
-			fmt.Println("found table without body")
-			return
-		}
-		nextRow := tBody.FirstChild
-		for nextRow != nil {
-			if nextRow.Tag != "tr" {
-				if nextRow.NextSibling != nil && nextRow.NextSibling.Tag == "tr" {
-					nextRow = nextRow.NextSibling
-				} else {
-					break
-				}
-			}
-			col := nextRow.FirstChild
-			tallestColumnHeight := 0.0
-			rowWidth := 0.0
-			for col != nil {
-				if strings.TrimSpace(col.Tag) == "" && col.NextSibling != nil {
-					col = col.NextSibling
-					continue
-				}
-				if col.Tag != "th" && col.Tag != "td" {
-					break
-				}
-				// draw, then move right
-				rText, textSize, bds := formatTextAsSprite(node, drawzone, 16.0, node.FirstChild.Raw.Data)
-				textVBuffer := textSize / 5 // todo: where is this from?
+			// TODO: thead
+			// TODO: tfoot
+			// TODO: colgroup
+			// TODO: col
+			// TODO: caption
+			// TODO: tbody
+			// TODO: th
+		case "th", "td":
+			consumed = renderNode(node.FirstChild, stack, drawzone, state)
 
-				// TODO: how wide are spaces? 3 spaces is 4 pixels here
-				w := float64(bds.Dx())
-				if w < 10 {
-					w = 10
-				}
-				if wd, ok := col.Style["width"]; ok {
-					parsed, ok := parseLength(wd)
-					if ok {
-						w = parsed
-					}
-				}
-				bkgDiff := drawBackground(col, stack, drawzone, textSize+textVBuffer, w)
-
-				bds.Min.X = int(drawzone.Min.X())
-				bds.Min.Y = int(drawzone.Min.Y())
-				bds.Max.X += int(drawzone.Min.X())
-				bds.Max.Y += int(drawzone.Min.Y())
-
-				rText.SetPos(drawzone.Min.X(), drawzone.Min.Y())
-				stack.draw(rText)
-				rowWidth += bkgDiff.X()
-				drawzone.Min = drawzone.Min.Add(floatgeom.Point2{bkgDiff.X(), 0})
-				col = col.NextSibling
-				if bkgDiff.Y() > tallestColumnHeight {
-					tallestColumnHeight = bkgDiff.Y()
-				}
+			// handle drawing of siblings according to the table draw style
+			// - siblings should not get our yDelta
+			// - but parents should get larger of this yDelta and sibling yDelta
+			drawzone.Min[0] += consumed[0]
+			siblingsConsumed := renderNode(node.NextSibling, stack, drawzone, state)
+			if consumed[1] < siblingsConsumed[1] {
+				consumed[1] = siblingsConsumed[1]
 			}
-			// move down
-			drawzone.Min = drawzone.Min.Add(floatgeom.Point2{-rowWidth, float64(tallestColumnHeight)})
-			nextRow = nextRow.NextSibling
-			if nextRow != nil && nextRow.Tag == "" { // ?????
-				nextRow = nextRow.NextSibling
-			}
+			drawzone.Min[1] += consumed[1]
+			siblingDrawn = true
 		}
 	}
-	drawzone.Min = drawzone.Min.Add(childDrawzoneModifier)
-	var childrenHeight float64
-	if !skipChildren {
-		childrenHeight = renderNode(node.FirstChild, stack, drawzone, state)
+	if !siblingDrawn {
+		drawzone.Min = drawzone.Min.Add(consumed)
+		siblingsConsumed := renderNode(node.NextSibling, stack, drawzone, state)
+		drawzone.Min = drawzone.Min.Add(siblingsConsumed)
 	}
-	drawzone.Min = drawzone.Min.Sub(childDrawzoneModifier)
-	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(childrenHeight)})
 
-	siblingsHeight := renderNode(node.NextSibling, stack, drawzone, state)
-	drawzone.Min = drawzone.Min.Add(floatgeom.Point2{0, float64(siblingsHeight)})
-	return drawzone.Min.Y() - startHeight
+	// TODO: x distance should only be increased in parent if parent is an inline component
+	// i.e. this 'p' / 'tr' is an incomplete list of parent tags
+	consumed = drawzone.Min.Sub(start)
+	switch node.Raw.Parent.Data {
+	case "p", "tr":
+		consumed[0] = 0
+	}
+	return consumed
 }
 
 func loadSrc(src string) (io.ReadCloser, error) {
@@ -844,30 +786,29 @@ func getTextColor(node *ParsedNode) color.Color {
 	return parsedColor
 }
 
+var nonBreakingWhitespace = rune(0xA0)
+
 // formatTextAsSprite from a node where styling decisions have already been taken care of given wrapping elem
 // introduced to dedupe a portion of div versus p
 // this is purely formatting as oak and should not contain any novel formatting decisions
 // consumer will often call the draw on the returned sprite and may add the bds sizing to the overall drawzone
 func formatTextAsSprite(node *ParsedNode, drawzone floatgeom.Rect2, textSizeDefault float64, inText string) (*render.Sprite, float64, image.Rectangle) {
-	textSize := textSizeDefault
-	if size, ok := parseLength(node.Style["font-size"]); ok {
-		textSize = float64(size)
-	}
+	textSize := parseLengthWithDefault(node.Style["font-size"], textSizeDefault)
 	newTxt := strings.Builder{}
-	foundNewline := false
+	skipWhitespace := false
 	var lastRn rune
 	for i, rn := range inText {
-		// trim all whitespace following newlines
-		if foundNewline && (rn == ' ' || rn == '\t' || rn == '\r') {
+		// trim all whitespace following newlines or 0xA0
+		if skipWhitespace && (rn == ' ' || rn == '\t' || rn == '\r' || rn == nonBreakingWhitespace) {
 			continue
 		}
-		foundNewline = false
-		if rn == '\n' {
+		skipWhitespace = false
+		if rn == '\n' || rn == nonBreakingWhitespace {
 			// newlines become spaces iff a space is not already present before them
-			if lastRn != ' ' && i != 0 {
+			if rn == '\n' && lastRn != ' ' && i != 0 {
 				newTxt.WriteRune(' ')
 			}
-			foundNewline = true
+			skipWhitespace = true
 			continue
 		}
 		newTxt.WriteRune(rn)
@@ -924,5 +865,4 @@ func applyPaddingForFinalOutput(node *ParsedNode, drawzone floatgeom.Rect2) (flo
 	childDrawZone.Min = drawzone.Min.Add(childDrawTop)
 	childDrawZone.Max = drawzone.Max.Add(childDrawBot)
 	return childDrawZone, childDrawTop, childDrawBot
-
 }

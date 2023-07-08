@@ -3,6 +3,8 @@ package hcj
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"golang.org/x/net/html"
 )
@@ -23,67 +25,37 @@ type InteractiveState struct {
 }
 
 func (pn *ParsedNode) String() string {
-
-	return pn.NestedString(0)
+	return pn.NestedString(0, 1)
 }
-func (pn *ParsedNode) NestedString(indent int) string {
-	out := ""
-	nest := ""
-	startLine := ""
-	if indent > 0 {
-		nest = "\n|"
-		startLine = "-"
-		for i := 0; i < indent; i++ {
-			nest += " "
-			startLine += "-"
-		}
-	}
-	if pn.Tag != "" {
-		out += nest + fmt.Sprintf("Tag:'%s' ", pn.Tag)
-	}
-	if pn.Raw != nil {
-		out += nest + fmt.Sprintf("SubNodeType:'%v' ", nodeTypeString(int(pn.Raw.Type)))
+func (pn *ParsedNode) NestedString(indent int, siblingNumber int) string {
+	out := strings.Repeat("\t", indent) + strconv.Itoa(siblingNumber) + ": "
+	nest := strings.Repeat("\t", indent) + "   "
+	switch pn.Raw.Type {
+	case html.TextNode:
+		out += fmt.Sprintf("Text:%q", strings.Replace(pn.Tag, "\n", "\\n", -1)) + "\n"
+	default:
+		out += fmt.Sprintf("Tag:'%s' ", pn.Tag) + "\n"
 	}
 	if pn.ID != "" {
-		out += nest + fmt.Sprintf("ID:'%s' ", pn.ID)
+		out += nest + fmt.Sprintf("ID:'%s' ", pn.ID) + "\n"
 	}
 	if len(pn.Classes) != 0 {
-		out += nest + fmt.Sprintf("Classes: %v ", pn.Classes)
+		out += nest + fmt.Sprintf("Classes: %v ", pn.Classes) + "\n"
 	}
 	if len(pn.Style) != 0 {
-		out += nest + fmt.Sprintf("Style: %v ", pn.Style)
+		out += nest + fmt.Sprintf("Style: %v ", pn.Style) + "\n"
 	}
 	if pn.FirstChild != nil {
-		out += nest + fmt.Sprintf("First: {%v} ", pn.FirstChild.NestedString(indent+1))
+		out += pn.FirstChild.NestedString(indent+1, 1)
 	}
 	if pn.NextSibling != nil {
-		out += nest + fmt.Sprintf("Next: {%v} ", pn.NextSibling.NestedString(indent))
+		out += pn.NextSibling.NestedString(indent, siblingNumber+1)
 	}
 	if len(out) == 0 {
 		return out
 	}
 
-	return "[\n" + startLine + out + "]"
-}
-
-func nodeTypeString(enumT int) string {
-	switch enumT {
-	case 0:
-		return "error"
-	case 1:
-		return "text"
-	case 2:
-		return "document"
-	case 3:
-		return "element"
-	case 4:
-		return "comment"
-	case 5:
-		return "doc"
-	case 6:
-		return "raw"
-	}
-	return "unknown"
+	return out
 }
 
 type ParseNodeOptions struct {
@@ -113,6 +85,11 @@ func ParseNode(node *html.Node, opts ...ParseNodeOption) *ParsedNode {
 		"background":       {},
 		"background-color": {},
 		"font-style":       {},
+		"display":          {},
+		"font-size":        {},
+		"font-weight":      {},
+		"width":            {},
+		"list-style-type":  {},
 	}
 	pn.CalculateStyle(cfg.CSS)
 INHERIT_LOOP:
